@@ -14,18 +14,24 @@ const bot = mineflayer.createBot({
   auth: 'offline'
 });
 
+//PLUGINS
+bot.loadPlugin(pathfinder)
+bot.loadPlugin(armorManager)
+
 //VARIABLES & CONSTANTS
 var state ="idle"
 var target = null
 const TARGETING_RANGE = 10
 const KITE_RANGE = 50
 const REACH = 3
-const CPS = 3
+const CPS = 3 //sheepy cps
 const COOLDOWN = new Map()
 const LASTACTION = new Map()
 
-bot.loadPlugin(pathfinder)
-bot.loadPlugin(armorManager)
+// COOLDOWNS
+COOLDOWN.set('attack',1000/CPS) //time between attacks, modify via CPS const
+COOLDOWN.set('stateprint',500) // time between console output of state
+
 
 
 /*bot state priority
@@ -59,7 +65,10 @@ bot.on('physicsTick', async () => {
     else{
         attack_target()
     }
-    console.log(state)
+    if (canDoAction("stateprint")){
+        console.log(state)
+    }else{
+    }
     //console.log(bot.getControlState('sprint'))
 });
 
@@ -90,10 +99,12 @@ function move_to_target(){
 function attack_target(){
     state = "ATTACKING TARGET"
     bot.lookAt(target.position)
-    bot.attack(target)
+    if(canDoAction("attack")){
+        bot.attack(target)
+    }
 }
 
-//helper functions
+//HELPEER FIUUNCIONS
 function get_nearest_player(){
     const nearest = bot.nearestEntity(entity =>
         entity.type === 'player' &&
@@ -103,3 +114,12 @@ function get_nearest_player(){
     return nearest
 }
 
+function canDoAction(action){
+    const now = Date.now();
+    const last = LASTACTION.get(action) || 0;
+    if (COOLDOWN.get(action) < (now - last)){
+        LASTACTION.set(action, now);
+        return true;
+    }
+    return false;
+}

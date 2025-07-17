@@ -47,29 +47,37 @@ bot.on("death", () => {
     bot_reset()
 });
 
+bot.on('entityGone', (entity) => {
+    if (target && entity.id === target.id) {
+        console.log("Target entity is gone (died or left)");
+        bot_reset();
+    }
+});
+
 
 bot.on('physicsTick', async () => {
     //bot decision tree is an if else loop, meaning it can only be in one state at a time. 
     if(target == null){
         get_new_target()
     }
-    else if (bot.entity.position.distanceTo(potential_target.position) > REACH){
-        if(bot.entity.position.distanceTo(potential_target.position) > KITE_RANGE){
+    else if (bot.entity.position.distanceTo(target.position) > REACH){
+        if(bot.entity.position.distanceTo(target.position) > KITE_RANGE){
             console.log("kited")
             bot_reset()
             return
         }
         move_to_target()
     }
-
     else{
         attack_target()
     }
+
+    //logging
     if (canDoAction("stateprint")){
         console.log(state)
     }else{
+    
     }
-    //console.log(bot.getControlState('sprint'))
 });
 
 function bot_reset(){
@@ -97,12 +105,18 @@ function move_to_target(){
 }
 
 function attack_target(){
+    //console.log(bot.entity.position.distanceTo(target.position))
+    //target = get_nearest_player()
+    //if (target){
+    console.log(target.position)
     state = "ATTACKING TARGET"
     bot.lookAt(target.position)
     if(canDoAction("attack")){
         bot.attack(target)
     }
+    //}
 }
+
 
 //HELPEER FIUUNCIONS
 function get_nearest_player(){

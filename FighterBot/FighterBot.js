@@ -101,7 +101,9 @@ function move_to_target(){
 
 function attack_target(){
     state = "ATTACKING TARGET"
-    bot.lookAt(target.position)
+    // Look at the target's eye level (1.62 above position.y for players)
+    const eyePos = target.position.offset(0, 1.62, 0);
+    bot.lookAt(eyePos);
     if(canDoAction("attack")){
         bot.attack(target)
     }

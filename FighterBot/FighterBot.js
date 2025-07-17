@@ -35,12 +35,12 @@ COOLDOWN.set('stateprint',500) // time between console output of state
 
 
 /*bot state priority
-1. heal
-2. eat food
-3. equip gear 
-4. attack target
-5. move to target
-6. get new target
+1. heal [not yet implemented]
+2. eat food [not yet implemented]
+3. equip gear [not yet implemented]
+4. attack target [basic]
+5. move to target [basic]
+6. get new target [basic]
 */
 
 bot.on("death", () => {
@@ -80,17 +80,12 @@ bot.on('physicsTick', async () => {
     }
 });
 
-function bot_reset(){
-    bot.setControlState('sprint', false)
-    target = null
-    bot.pathfinder.setGoal(null)
-    console.log("RESETTING")
 
-}
+
+//STATE FUNCTIONS
 
 function get_new_target(){
     state = "LOOKING FOR TARGET"
-    //console.log("getting new target")
     potential_target = get_nearest_player()
     if (potential_target && 
         bot.entity.position.distanceTo(potential_target.position) < TARGETING_RANGE){
@@ -105,26 +100,20 @@ function move_to_target(){
 }
 
 function attack_target(){
-    //console.log(bot.entity.position.distanceTo(target.position))
-    //target = get_nearest_player()
-    //if (target){
-    console.log(target.position)
     state = "ATTACKING TARGET"
     bot.lookAt(target.position)
     if(canDoAction("attack")){
         bot.attack(target)
     }
-    //}
 }
 
 
-//HELPEER FIUUNCIONS
+//HELPER FUNCTIONS
 function get_nearest_player(){
     const nearest = bot.nearestEntity(entity =>
         entity.type === 'player' &&
         entity.username !== bot.username
       )
-    //console.log(nearest)
     return nearest
 }
 
@@ -136,4 +125,11 @@ function canDoAction(action){
         return true;
     }
     return false;
+}
+
+function bot_reset(){
+    bot.setControlState('sprint', false)
+    target = null
+    bot.pathfinder.setGoal(null)
+    console.log("RESETTING")
 }

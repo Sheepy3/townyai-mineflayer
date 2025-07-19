@@ -36,8 +36,8 @@ COOLDOWN.set('stateprint',500) // time between console output of state
 
 
 /*bot state priority
-    0. equip armor [not yet implemented] -> implement command to set state to gearing, and then   
-1. heal [not yet implemented] -> check if health below threshold, and run heal()
+0. equip armor [not yet implemented] -> implement command to set state to gearing, for startup. additionally, switch state to gearing on playerCollect. add if statement to check if the state is gearing, then run the gear() function. 
+1. heal [not yet implemented] -> check if health below threshold, and run heal(). probably create and use a heal timer to stop it from spamming pots. 
 2. eat food [not yet implemented]   -> check if hunger below threshold, and run eat()
 3. attack target [basic]
 4. move to target [basic]
@@ -94,6 +94,11 @@ function eat(){
 
 function heal(){
     
+}
+
+function gear(){
+
+    var state ="idle" //after finishing gearing, reset state
 }
 
 function get_new_target(){

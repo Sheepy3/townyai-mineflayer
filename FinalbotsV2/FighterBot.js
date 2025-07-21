@@ -27,8 +27,6 @@ bot.once('spawn', () => {
 //VARIABLES & CONSTANTS
 var state ="idle"
 var target = null
-var healing = false
-var eating = false
 const TARGETING_RANGE = 1
 const KITE_RANGE = 50
 const REACH = 3.2
@@ -41,9 +39,9 @@ const LASTACTION = new Map()
 // COOLDOWNS, time in miliseconds
 
 COOLDOWN.set('attack',1000/CPS) //time between attacks, modify via CPS const
-COOLDOWN.set('stateprint',1000) // time between console output of state
+COOLDOWN.set('stateprint',100) // time between console output of state
 COOLDOWN.set('gearing',300) // time for gearing process
-COOLDOWN.set('healing',200) // time between healing attempts
+COOLDOWN.set('healing',1000) // time between healing attempts
 COOLDOWN.set('eating',500) // time between eating attempts
 COOLDOWN.set('playerCollect',150) // time for player collect gearing
 
@@ -84,18 +82,17 @@ bot.on('physicsTick', async () => {
         // and add a new if to the front.  
         
         // Eating has highest priority and cannot be interrupted
-        if(eating){
-            // Do nothing - let eating complete
+        if(state == "EATING"){
             return
         }
         else if(bot.health < HEALTH_THRESHOLD && canBuffSelf()){
             heal()
+            
         }
         else if(state === "gearing"){
             gear()
         }
         else if(bot.food <= HUNGER_THRESHOLD && canEatFood()){
-            // Hunger at 3 or below - interrupt all functions except gearing and healing
             eat()
         }
         else if(target == null){
@@ -115,7 +112,7 @@ bot.on('physicsTick', async () => {
 
         //logging
         if (canDoAction("stateprint")){
-            console.log(state)
+           // console.log(state)
         }
     } catch (error) {
         console.log('Physics tick error:', error.message)
@@ -128,19 +125,92 @@ bot.on('physicsTick', async () => {
 
 //STATE FUNCTIONS
 
-function eat(){
-    if (!eating && canDoAction("eating")) {
-        eating = true
+async function eat() {
+
+    if (state !="EATING" && canDoAction("eating")) {
         state = "EATING"
-        consumeFood()
+        const food = getBestFood()
+        
+        if (!food) {
+            console.log('No valid food found in inventory')
+            state = "EATING"
+            state = "IDLE"
+            return
+        }
+        
+        try {
+            // Equip the food item
+            await bot.equip(food, 'hand')
+            
+            // Start eating
+            await bot.consume()
+            
+            console.log(`Consumed ${food.name}`)
+            
+            // Reset eating state and re-equip sword
+            eating = false
+            state = "IDLE"
+            equipStrongestSword()
+        } catch (error) {
+            console.log('Error while eating:', error.message)
+            eating = false
+            state = "IDLE"
+            equipStrongestSword()
+        }
     }
 }
 
-function heal(){
-    if (!healing && canDoAction("healing")) {
-        healing = true
+async function heal() {
+
+    if (state !="HEALING" && canDoAction("healing")){
         state = "HEALING"
-        throwInstantHealth()
+
+
+        // 1. Find a splash instant health potion in inventory
+        const potion = findItemInInventory('splash_potion')
+
+        if (!potion) {
+            console.log('No healing splash potion found')
+            state = "IDLE"
+            return
+        }
+        
+        try {
+            // 2. Equip it in hand
+            await bot.equip(potion, 'hand')
+
+            // Add a short random delay before buffing (between 0.05 and 0.5 seconds)
+            const ticks = Math.floor(Math.random() * 10) + 1;
+            await bot.waitForTicks(ticks);
+            //await new Promise(resolve => setTimeout(resolve, delayMs))
+
+            // 3. Turn away from target if there is one, otherwise look at feet
+            if (target) {
+                // Calculate direction away from target
+                const awayFromTarget = bot.entity.position.minus(target.position).normalize()
+                const lookPosition = bot.entity.position.plus(awayFromTarget.scaled(2))
+                await bot.lookAt(lookPosition, true)
+            } 
+            
+            await bot.waitForTicks(5)
+            
+            const Vec3 = require('vec3')
+            await bot.activateItem(false, new Vec3(0, -1, 0))
+            console.log('Threw a splash instant health potion at my feet!')
+
+            // 5. Stop moving forward after throwing
+            bot.setControlState('forward', false)
+
+            // 6. Immediately resume normal state after healing and re-equip sword
+            healing = false
+            state = "idle"
+            equipStrongestSword()
+        } catch (error) {
+            console.log('Error during healing:', error.message)
+            healing = false
+            state = "idle"
+            equipStrongestSword()
+        }
     }
 }
 
@@ -259,83 +329,9 @@ function getBestFood() {
     return null
 }
 
-async function consumeFood() {
-    const food = getBestFood()
-    
-    if (!food) {
-        console.log('No valid food found in inventory')
-        eating = false
-        state = "idle"
-        return
-    }
-    
-    try {
-        // Equip the food item
-        await bot.equip(food, 'hand')
-        
-        // Start eating
-        await bot.consume()
-        
-        console.log(`Consumed ${food.name}`)
-        
-        // Reset eating state and re-equip sword
-        eating = false
-        state = "idle"
-        equipStrongestSword()
-    } catch (error) {
-        console.log('Error while eating:', error.message)
-        eating = false
-        state = "idle"
-        equipStrongestSword()
-    }
-}
 
-async function throwInstantHealth() {
-    // 1. Find a splash instant health potion in inventory
-    const potion = findItemInInventory('splash_potion')
 
-    if (!potion) {
-        console.log('No healing splash potion found')
-        healing = false
-        return
-    }
-    
-    try {
-        // 2. Equip it in hand
-        await bot.equip(potion, 'hand')
 
-        // Add a short random delay before buffing (between 0.05 and 0.5 seconds)
-        const delayMs = 20 + Math.random() * 250
-        await new Promise(resolve => setTimeout(resolve, delayMs))
-
-        // 3. Turn away from target if there is one, otherwise look at feet
-        if (target) {
-            // Calculate direction away from target
-            const awayFromTarget = bot.entity.position.minus(target.position).normalize()
-            const lookPosition = bot.entity.position.plus(awayFromTarget.scaled(2))
-            await bot.lookAt(lookPosition, true)
-        } 
-        
-        await bot.waitForTicks(5)
-        
-        const Vec3 = require('vec3')
-        await bot.activateItem(false, new Vec3(0, -1, 0))
-        console.log('Threw a splash instant health potion at my feet!')
-
-        // 5. Stop moving forward after throwing
-        bot.setControlState('forward', false)
-
-        // 6. Immediately resume normal state after healing and re-equip sword
-        healing = false
-        state = "idle"
-        equipStrongestSword()
-    } catch (error) {
-        console.log('Error during healing:', error.message)
-        healing = false
-        state = "idle"
-        equipStrongestSword()
-    }
-}
 
 function getStrongestSword() {
     const swords = bot.inventory.items().filter(item => item.name.endsWith('_sword'))

@@ -7,11 +7,11 @@ const armorManager = require('mineflayer-armor-manager')
 
 //BOT INSTANCE
 const bot = mineflayer.createBot({
-  host:'173.73.200.194',//host: '173.73.200.194',
+  host:'107.138.47.146',//host: '173.73.200.194',
   port: 25565,
-  username: 'Fighter',
+  username: 'saiermcasdeo@gmail.com',
   version: '1.21.4',
-  auth: 'offline'
+  auth: 'microsoft', // or 'mojang' for older versions
 });
 
 //PLUGINS
@@ -31,8 +31,8 @@ var healing = false
 var eating = false
 const TARGETING_RANGE = 10
 const KITE_RANGE = 50
-const REACH = 3
-const CPS = 3 //sheepy cps
+const REACH = 4
+const CPS = 14 //sheepy cps
 const HEALTH_THRESHOLD = 10
 const HUNGER_THRESHOLD = 3
 const COOLDOWN = new Map()
@@ -41,11 +41,11 @@ const LASTACTION = new Map()
 // COOLDOWNS, time in miliseconds
 
 COOLDOWN.set('attack',1000/CPS) //time between attacks, modify via CPS const
-COOLDOWN.set('stateprint',500) // time between console output of state
-COOLDOWN.set('gearing',500) // time for gearing process
-COOLDOWN.set('healing',350) // time between healing attempts
-COOLDOWN.set('eating',2000) // time between eating attempts
-COOLDOWN.set('playerCollect',250) // time for player collect gearing
+COOLDOWN.set('stateprint',1000) // time between console output of state
+COOLDOWN.set('gearing',300) // time for gearing process
+COOLDOWN.set('healing',200) // time between healing attempts
+COOLDOWN.set('eating',1500) // time between eating attempts
+COOLDOWN.set('playerCollect',150) // time for player collect gearing
 
 // to use a cooldown, just put code in an if statement using canDoAction("action name)
 
@@ -78,39 +78,51 @@ bot.on('playerCollect', (collector, itemDrop) => {
 });
 
 bot.on('physicsTick', async () => {
-    //bot decision tree is an if else loop, meaning it can only be in one state at a time. 
-    // to add a new state to the front (eg needed for health and hunger) change previous first "if" to an "else if"
-    // and add a new if to the front.  
-    if(bot.health < HEALTH_THRESHOLD && canBuffSelf()){
-        heal()
-    }
-    else if(state === "gearing"){
-        gear()
-    }
-    else if(bot.food <= HUNGER_THRESHOLD && canEatFood()){
-        // Hunger at 3 or below - interrupt all functions except gearing and healing
-        eat()
-    }
-    else if(target == null){
-        get_new_target()
-    }
-    else if (bot.entity.position.distanceTo(target.position) > REACH){
-        if(bot.entity.position.distanceTo(target.position) > KITE_RANGE){
-            console.log("kited")
-            bot_reset()
+    try {
+        //bot decision tree is an if else loop, meaning it can only be in one state at a time. 
+        // to add a new state to the front (eg needed for health and hunger) change previous first "if" to an "else if"
+        // and add a new if to the front.  
+        
+        // Eating has highest priority and cannot be interrupted
+        if(eating){
+            // Do nothing - let eating complete
             return
         }
-        move_to_target()
-    }
-    else{
-        attack_target()
-    }
+        else if(bot.health < HEALTH_THRESHOLD && canBuffSelf()){
+            heal()
+        }
+        else if(state === "gearing"){
+            gear()
+        }
+        else if(bot.food <= HUNGER_THRESHOLD && canEatFood()){
+            // Hunger at 3 or below - interrupt all functions except gearing and healing
+            eat()
+        }
+        else if(target == null){
+            get_new_target()
+        }
+        else if (bot.entity.position.distanceTo(target.position) > REACH){
+            if(bot.entity.position.distanceTo(target.position) > KITE_RANGE){
+                console.log("kited")
+                bot_reset()
+                return
+            }
+            move_to_target()
+        }
+        else{
+            attack_target()
+        }
 
-    //logging
-    if (canDoAction("stateprint")){
-        console.log(state)
-    }else{
-    
+        //logging
+        if (canDoAction("stateprint")){
+            console.log(state)
+        }
+    } catch (error) {
+        console.log('Physics tick error:', error.message)
+        // Reset bot state on error to prevent getting stuck
+        if (error.message.includes('PartialReadError') || error.message.includes('Read error')) {
+            bot_reset()
+        }
     }
 });
 

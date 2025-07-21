@@ -25,7 +25,7 @@ bot.once('spawn', () => {
 })
 
 //VARIABLES & CONSTANTS
-var state ="idle"
+var state ="IDLE"
 var target = null
 const TARGETING_RANGE = 1
 const KITE_RANGE = 50
@@ -53,7 +53,7 @@ const VALID_FOODS = [
 // COOLDOWNS, time in miliseconds
 
 COOLDOWN.set('attack',1000/CPS) //time between attacks, modify via CPS const
-COOLDOWN.set('stateprint',100) // time between console output of state
+COOLDOWN.set('stateprint',500) // time between console output of state
 COOLDOWN.set('gearing',300) // time for gearing process
 COOLDOWN.set('healing',1000) // time between healing attempts
 COOLDOWN.set('eating',500) // time between eating attempts
@@ -155,11 +155,9 @@ async function eat() {
             await bot.consume()
             //console.log("im so fucking weird")
             // Reset eating state and re-equip sword
-            eating = false
             state = "IDLE"
         } catch (error) {
             console.log('Error while eating:', error.message)
-            eating = false
             state = "IDLE"
         }
         equipStrongestSword()
@@ -167,7 +165,6 @@ async function eat() {
 }
 
 async function heal() {
-
     if (state !="HEALING" && canDoAction("healing")){
         state = "HEALING"
 
@@ -209,12 +206,10 @@ async function heal() {
             bot.setControlState('forward', false)
 
             // Immediately resume normal state after healing and re-equip sword
-            healing = false
             state = "IDLE"
             equipStrongestSword()
         } catch (error) {
             console.log('Error during healing:', error.message)
-            healing = false
             state = "IDLE"
             equipStrongestSword()
         }
@@ -232,7 +227,7 @@ function gear(){
     
     // Reset state after gearing cooldown and ensure sword is equipped
     if (canDoAction("gearing")) {
-        state = "idle"
+        state = "IDLE"
         equipStrongestSword()
     }
 }
@@ -314,7 +309,7 @@ async function getBestFood() {
     return false
 }
 
-function getStrongestSword() { //need to update to match patter of getBestFood
+function getStrongestSword() { //need to update to match the pattern of getBestFood, for consistency. combine with equipStrongestSword.
     const swords = bot.inventory.items().filter(item => item.name.endsWith('_sword'))
     if (swords.length === 0) return null
     const swordOrder = [
@@ -351,8 +346,6 @@ function bot_reset(){
     bot.setControlState('sprint', false)
     bot.setControlState('forward', false)
     target = null
-    healing = false
-    eating = false
     bot.pathfinder.setGoal(null)
     console.log("RESETTING")
 }

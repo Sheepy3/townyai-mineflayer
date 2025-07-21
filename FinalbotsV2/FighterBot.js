@@ -7,11 +7,11 @@ const armorManager = require('mineflayer-armor-manager')
 
 //BOT INSTANCE
 const bot = mineflayer.createBot({
-  host:'107.138.47.146',//host: '173.73.200.194',
+  host:'173.73.200.194',//host: '173.73.200.194',
   port: 25565,
-  username: 'saiermcasdeo@gmail.com',
+  username: 'Fighterbot',
   version: '1.21.4',
-  auth: 'microsoft', // or 'mojang' for older versions
+  auth: 'offline', // or 'mojang' for older versions
 });
 
 //PLUGINS
@@ -29,12 +29,12 @@ var state ="idle"
 var target = null
 var healing = false
 var eating = false
-const TARGETING_RANGE = 10
+const TARGETING_RANGE = 1
 const KITE_RANGE = 50
-const REACH = 4
-const CPS = 14 //sheepy cps
+const REACH = 3.2
+const CPS = 4 //sheepy cps
 const HEALTH_THRESHOLD = 10
-const HUNGER_THRESHOLD = 3
+const HUNGER_THRESHOLD = 6
 const COOLDOWN = new Map()
 const LASTACTION = new Map()
 
@@ -44,7 +44,7 @@ COOLDOWN.set('attack',1000/CPS) //time between attacks, modify via CPS const
 COOLDOWN.set('stateprint',1000) // time between console output of state
 COOLDOWN.set('gearing',300) // time for gearing process
 COOLDOWN.set('healing',200) // time between healing attempts
-COOLDOWN.set('eating',1500) // time between eating attempts
+COOLDOWN.set('eating',500) // time between eating attempts
 COOLDOWN.set('playerCollect',150) // time for player collect gearing
 
 // to use a cooldown, just put code in an if statement using canDoAction("action name)

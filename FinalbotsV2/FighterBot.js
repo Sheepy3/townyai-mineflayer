@@ -314,13 +314,7 @@ async function throwInstantHealth() {
             const awayFromTarget = bot.entity.position.minus(target.position).normalize()
             const lookPosition = bot.entity.position.plus(awayFromTarget.scaled(2))
             await bot.lookAt(lookPosition, true)
-        } else {
-            // Look at the block at your feet if no target
-            const feetBlock = bot.blockAt(bot.entity.position.offset(0, -1, 0))
-            if (feetBlock) {
-                await bot.lookAt(feetBlock.position, true)
-            }
-        }
+        } 
         
         await bot.waitForTicks(5)
         

@@ -35,6 +35,20 @@ const HEALTH_THRESHOLD = 10
 const HUNGER_THRESHOLD = 6
 const COOLDOWN = new Map()
 const LASTACTION = new Map()
+// Valid food items the bot can eat
+const VALID_FOODS = [
+    'enchanted_golden_apple',
+    'golden_carrot',
+    'cooked_beef', // steak
+    'cooked_porkchop',
+    'golden_apple',
+    'cooked_rabbit',
+    'cooked_mutton',
+    'bread',
+    'cooked_cod',
+    'baked_potato',
+    'cooked_chicken'
+]
 
 // COOLDOWNS, time in miliseconds
 
@@ -49,13 +63,14 @@ COOLDOWN.set('playerCollect',150) // time for player collect gearing
 
 /*bot state priority
 0. equip armor [implemented] -> gearing system with cooldown
-1. heal [implemented] -> check if health below 10, throw splash potions away from target with cooldown
-2. eat food [implemented] -> hunger ≤3 interrupts all functions except gearing and healing
+1. heal [implemented] -> check if health below 10, throw splash potions away from target with cooldown. if below 6, double pots
+2. eat food [implemented] -> hunger ≤6 interrupts all functions except gearing and healing
 3. attack target [implemented] -> basic combat with CPS limiting
 4. move to target [implemented] -> pathfinding with sprint and kiting
 5. get new target [implemented] -> nearest player within targeting range
 */
 
+//INTERRUPT TRIGGERS
 bot.on("death", () => {
     bot_reset()
 });
@@ -85,7 +100,7 @@ bot.on('physicsTick', async () => {
         if(state == "EATING"){
             return
         }
-        else if(bot.health < HEALTH_THRESHOLD && canBuffSelf()){
+        else if(bot.health < HEALTH_THRESHOLD && canHealSelf()){
             heal()
             
         }
@@ -112,7 +127,7 @@ bot.on('physicsTick', async () => {
 
         //logging
         if (canDoAction("stateprint")){
-           // console.log(state)
+            console.log(state)
         }
     } catch (error) {
         console.log('Physics tick error:', error.message)
@@ -129,34 +144,25 @@ async function eat() {
 
     if (state !="EATING" && canDoAction("eating")) {
         state = "EATING"
-        const food = getBestFood()
+        const food = await getBestFood()
         
         if (!food) {
             console.log('No valid food found in inventory')
-            state = "EATING"
             state = "IDLE"
             return
         }
-        
         try {
-            // Equip the food item
-            //await bot.equip(food, 'hand')
-            
-            // Start eating
             await bot.consume()
-            
-            console.log(`Consumed ${food.name}`)
-            
+            //console.log("im so fucking weird")
             // Reset eating state and re-equip sword
             eating = false
             state = "IDLE"
-            equipStrongestSword()
         } catch (error) {
             console.log('Error while eating:', error.message)
             eating = false
             state = "IDLE"
-            equipStrongestSword()
         }
+        equipStrongestSword()
     }
 }
 
@@ -166,8 +172,8 @@ async function heal() {
         state = "HEALING"
 
 
-        // 1. Find a splash instant health potion in inventory
-        const potion = await findItemInInventory('splash_potion')
+        // Find a splash instant health potion in inventory
+        const potion = await GetItemInInventory('splash_potion')
 
         if (!potion) {
             console.log('No healing splash potion found')
@@ -176,45 +182,40 @@ async function heal() {
         }
         
         try {
-            // 2. Equip it in hand
             
-
             // Add a short random delay before buffing (between 0.05 and 0.5 seconds)
             const ticks = Math.floor(Math.random() * 10) + 1;
             await bot.waitForTicks(ticks);
-            //await new Promise(resolve => setTimeout(resolve, delayMs))
-
-            // 3. Turn away from target if there is one, otherwise look at feet
+          
+            // Turn away from target if there is one, otherwise look at feet
             if (target) {
                 // Calculate direction away from target
                 const awayFromTarget = bot.entity.position.minus(target.position).normalize()
                 const lookPosition = bot.entity.position.plus(awayFromTarget.scaled(2))
                 await bot.lookAt(lookPosition, true)
+                bot.setControlState('forward', true)
             } 
-            
-            await bot.waitForTicks(5)
             
             const Vec3 = require('vec3')
             if(bot.health < 7){
                 await bot.activateItem(false, new Vec3(0, -1, 0))
-                COOLDOWN.set('healing',500)
+                COOLDOWN.set('healing',500) //double pot
             }else{
                 await bot.activateItem(false, new Vec3(0, -1, 0))
                 COOLDOWN.set('healing',1000)
             }
-            console.log('potting')
 
-            // 5. Stop moving forward after throwing
+            // Stop moving forward after throwing
             bot.setControlState('forward', false)
 
-            // 6. Immediately resume normal state after healing and re-equip sword
+            // Immediately resume normal state after healing and re-equip sword
             healing = false
-            state = "idle"
+            state = "IDLE"
             equipStrongestSword()
         } catch (error) {
             console.log('Error during healing:', error.message)
             healing = false
-            state = "idle"
+            state = "IDLE"
             equipStrongestSword()
         }
     }
@@ -262,7 +263,6 @@ function attack_target(){
 }
 
 //HELPER FUNCTIONS
-
 function get_nearest_player(){
     const nearest = bot.nearestEntity(entity =>
         entity.type === 'player' &&
@@ -271,18 +271,15 @@ function get_nearest_player(){
     return nearest
 }
 
-// Shared helper function for finding items in inventory
-async function findItemInInventory(itemName) {
-    
+// Shared helper function for getting items in inventory
+async function GetItemInInventory(itemName) {
     let found_item = bot.inventory.items().find(item => item.name === itemName)
     if (found_item){
-        console.log("found item" + found_item.name)
         await bot.equip(found_item, 'hand')
         return true
     }else{
         return false
     }
-    
 }
 
 // Shared helper function for checking if item exists in inventory
@@ -296,24 +293,9 @@ function getPotionId(item) {
 }
 
 // Buff logic: checks for any splash instant health potion (strong or regular)
-function canBuffSelf() {
+function canHealSelf() {
     return hasItemInInventory('splash_potion')
 }
-
-// Valid food items the bot can eat
-const VALID_FOODS = [ //this list is duplicated unnecessarily
-    'enchanted_golden_apple',
-    'golden_carrot',
-    'cooked_beef', // steak
-    'cooked_porkchop',
-    'golden_apple',
-    'cooked_rabbit',
-    'cooked_mutton',
-    'bread',
-    'cooked_cod',
-    'baked_potato',
-    'cooked_chicken'
-]
 
 // Check if bot has any valid food in inventory
 function canEatFood() {
@@ -321,32 +303,16 @@ function canEatFood() {
 }
 
 // Find the best food item to eat (prioritizes higher nutrition)
-function getBestFood() {
-    // Priority order (best nutrition first)
-    const foodPriority = [
-        'enchanted_golden_apple',
-        'golden_apple',
-        'golden_carrot',
-        'cooked_beef',
-        'cooked_porkchop',
-        'cooked_mutton',
-        'cooked_chicken',
-        'cooked_rabbit',
-        'cooked_cod',
-        'baked_potato',
-        'bread'
-    ]
-    
-    for (const food of foodPriority) {
-        const item = findItemInInventory(food)
-        if (item) return item
+async function getBestFood() {
+    for (const foodName of VALID_FOODS) {
+        const hasFood = await GetItemInInventory(foodName)
+        if (hasFood) {
+            console.log(hasFood)
+            return true
+        }
     }
-    return null
+    return false
 }
-
-
-
-
 
 function getStrongestSword() { //need to update to match patter of getBestFood
     const swords = bot.inventory.items().filter(item => item.name.endsWith('_sword'))

@@ -140,7 +140,7 @@ async function eat() {
         
         try {
             // Equip the food item
-            await bot.equip(food, 'hand')
+            //await bot.equip(food, 'hand')
             
             // Start eating
             await bot.consume()
@@ -167,7 +167,7 @@ async function heal() {
 
 
         // 1. Find a splash instant health potion in inventory
-        const potion = findItemInInventory('splash_potion')
+        const potion = await findItemInInventory('splash_potion')
 
         if (!potion) {
             console.log('No healing splash potion found')
@@ -177,7 +177,7 @@ async function heal() {
         
         try {
             // 2. Equip it in hand
-            await bot.equip(potion, 'hand')
+            
 
             // Add a short random delay before buffing (between 0.05 and 0.5 seconds)
             const ticks = Math.floor(Math.random() * 10) + 1;
@@ -195,8 +195,14 @@ async function heal() {
             await bot.waitForTicks(5)
             
             const Vec3 = require('vec3')
-            await bot.activateItem(false, new Vec3(0, -1, 0))
-            console.log('Threw a splash instant health potion at my feet!')
+            if(bot.health < 7){
+                await bot.activateItem(false, new Vec3(0, -1, 0))
+                COOLDOWN.set('healing',500)
+            }else{
+                await bot.activateItem(false, new Vec3(0, -1, 0))
+                COOLDOWN.set('healing',1000)
+            }
+            console.log('potting')
 
             // 5. Stop moving forward after throwing
             bot.setControlState('forward', false)
@@ -266,8 +272,17 @@ function get_nearest_player(){
 }
 
 // Shared helper function for finding items in inventory
-function findItemInInventory(itemName) {
-    return bot.inventory.items().find(item => item.name === itemName)
+async function findItemInInventory(itemName) {
+    
+    let found_item = bot.inventory.items().find(item => item.name === itemName)
+    if (found_item){
+        console.log("found item" + found_item.name)
+        await bot.equip(found_item, 'hand')
+        return true
+    }else{
+        return false
+    }
+    
 }
 
 // Shared helper function for checking if item exists in inventory
@@ -286,7 +301,7 @@ function canBuffSelf() {
 }
 
 // Valid food items the bot can eat
-const VALID_FOODS = [
+const VALID_FOODS = [ //this list is duplicated unnecessarily
     'enchanted_golden_apple',
     'golden_carrot',
     'cooked_beef', // steak
@@ -333,7 +348,7 @@ function getBestFood() {
 
 
 
-function getStrongestSword() {
+function getStrongestSword() { //need to update to match patter of getBestFood
     const swords = bot.inventory.items().filter(item => item.name.endsWith('_sword'))
     if (swords.length === 0) return null
     const swordOrder = [

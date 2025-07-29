@@ -2,7 +2,6 @@ const mineflayer      = require('mineflayer');
 const mcData     = require('minecraft-data')('1.21.4')  // adjust to match your server version
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder')
 const armorManager = require('mineflayer-armor-manager')
-
 const Vec3 = require('vec3')
 
 //BOT INSTANCE
@@ -22,82 +21,69 @@ bot.loadPlugin(armorManager)
 bot.once('spawn', () => {
     console.log('Bot spawned and starting initial gearing.')
     state = "gearing"
-    // Set patrol center to spawn position
-    patrolCenter = bot.entity.position.clone()
 })
 
 //VARIABLES & CONSTANTS
 var state ="IDLE"
 var target = null
-var lastEnchantedAppleTime = 0 // Track when last enchanted apple was eaten
-var lastGoldenAppleTime = 0 // Track when last golden apple was eaten
-var patrolCenter = null // Center point for patrol area
-var currentPatrolTarget = null // Current patrol destination
-const TARGETING_RANGE = 7.5 // Close range targeting
-const LINE_OF_SIGHT_RANGE = 25 // Long range line of sight detection
+var consecutiveMisses = 0 // Track consecutive misses for progressive miss chance
+var strafeDirection = null // Current strafe direction (null, 'left', 'right', 'back')
+var strafeEndTime = 0 // When current strafe should end
+var lastStrafeDecision = 0 // When last strafe decision was made
+const TARGETING_RANGE = 25 // Close range targeting
 const KITE_RANGE = 50
 const REACH_MIN = 2.85 // Minimum attack reach
-const REACH_MAX = 3.68 // Maximum attack reach
-const MISS_CHANCE_MIN = 0.18 // 18% minimum miss chance
-const MISS_CHANCE_MAX = 0.20 // 20% maximum miss chance
-const CPS = 13 //sheepy cps
+const REACH_MAX = 3.90 // Maximum attack reach
+const MISS_CHANCE_BASE = 0.04 // 18% base miss chance
+const MISS_CHANCE_MAX_BASE = 0.14 // 20% maximum base miss chance
+const MISS_STREAK_INCREASE_MIN = 0.05 // 5% minimum increase per consecutive miss
+const MISS_STREAK_INCREASE_MAX = 0.12 // 12% maximum increase per consecutive miss
+const MISS_STREAK_RESET = 5 // Reset miss streak after 5 attempts
+const CPS = 16 //sheepy cps
 const HEALTH_THRESHOLD = 10
-const HUNGER_THRESHOLD = 6
+const HUNGER_THRESHOLD = 18
 const COOLDOWN = new Map()
 const LASTACTION = new Map()
 
 // Ally system constants
-const ALLY_LIST = ['xtoa', 'CowardlyFirebo1t'] // Players the bot will not attack
-const ALLY_MAX_DISTANCE = 10 // Maximum distance from allied players
-
-// Pearling constants
-const PEARL_MIN_DISTANCE = 8 // Minimum distance to start pearling
-const PEARL_MAX_DISTANCE = 25 // Maximum effective pearling distance
-const PEARL_CLOSE_PROB = 0.15 // 15% chance at close range (8-12 blocks)
-const PEARL_MID_PROB = 0.35 // 35% chance at mid range (12-18 blocks)  
-const PEARL_FAR_PROB = 0.65 // 65% chance at far range (18-25 blocks)
+const ALLY_LIST = [''] // Players the bot will not attack
+const ALLY_MAX_DISTANCE = 7.5 // Maximum distance from allied players
 
 // Valid food items the bot can eat
 const VALID_FOODS = [
     'enchanted_golden_apple',
+    'golden_apple',
     'golden_carrot',
     'cooked_beef', // steak
     'cooked_porkchop',
-    'golden_apple',
     'cooked_rabbit',
     'cooked_mutton',
     'bread',
     'cooked_cod',
     'baked_potato',
-    'cooked_chicken'
+    'cooked_chicken',
 ]
 
-// COOLDOWNS, time in miliseconds
-
-COOLDOWN.set('attack',1200/CPS) //time between attacks, modify via CPS const
+// COOLDOWNS, time in miliseconds 
+COOLDOWN.set('attack',800/CPS) //time between attacks, modify via CPS const
 COOLDOWN.set('stateprint',500) // time between console output of state
-COOLDOWN.set('gearing',300) // time for gearing process
+COOLDOWN.set('gearing',500) // time for gearing process
 COOLDOWN.set('healing',1000) // time between healing attempts
 COOLDOWN.set('eating',500) // time between eating attempts
-COOLDOWN.set('playerCollect',150) // time for player collect gearing
-COOLDOWN.set('pearling',2000) // time between enderpearl throws
-COOLDOWN.set('enchantedAppleCheck',16000) // 16 seconds between enchanted apple checks
+COOLDOWN.set('playerCollect',250) // time for player collect gearing
 COOLDOWN.set('movementSwing',75) // ~13 CPS for movement swinging
-COOLDOWN.set('combatAppleCheck',15000) // 15 seconds average between combat apple checks (10-23s range)
-COOLDOWN.set('patrol',24000) // 24 seconds average between patrol movements (16-32s range)
 COOLDOWN.set('lookAround',2000) // 2 seconds between look around actions
-COOLDOWN.set('patrolMovement',3000) // 3 seconds between patrol movement updates
-
-// to use a cooldown, just put code in an if statement using canDoAction("action name)
+COOLDOWN.set('targetCheck',2000) // 2 seconds between target checks
+COOLDOWN.set('strafeDecision',4000) // 4 seconds between strafe decisions
 
 /*bot state priority
-0. return to ally [NEW] -> if too far from ally, return to them
 1. equip armor [implemented] -> gearing system with cooldown
-2. heal [implemented] -> check if health below 10, throw splash potions away from target with cooldown. if below 6, double pots
-3. eat food [implemented] -> hunger ≤6 interrupts all functions except gearing and healing
-4. attack target [implemented] -> basic combat with CPS limiting
-5. move to target [implemented] -> pathfinding with sprint and kiting
-6. get new target [implemented] -> nearest player within targeting range (excluding allies)
+2. heal [implemented] -> check if health below 10, throw splash potions away from target with cooldown. if below 7, double pots
+3. eat food [implemented] -> hunger ≤18 interrupts all functions except gearing and healing
+4. return to ally [implemented] -> if too far from ally, return to them
+5. attack target [implemented] -> basic combat with CPS limiting with progressive miss chance
+6. move to target [implemented] -> pathfinding with sprint and kiting
+7. get new target [implemented] -> nearest player within targeting range (excluding allies)
 */
 
 //INTERRUPT TRIGGERS
@@ -120,62 +106,73 @@ bot.on('playerCollect', (collector, itemDrop) => {
     }
 });
 
+bot.on('whisper', (from, msg) => {
+    bot.chat('recieved: ' + msg)
+});
+
 bot.on('physicsTick', async () => {
-    // Constantly activate item only when eating
+    // Constantly activate item when in eating state
     if (state === "EATING") {
         bot.activateItem();
+        
+        // Jump and face away from target while eating
+        jumpAndFaceAwayWhileEating();
+    } else {
+        // Stop jumping when not eating
+        bot.setControlState('jump', false);
     }
 })
 
 bot.on('physicsTick', async () => {
     try {
-        //bot decision tree is an if else loop, meaning it can only be in one state at a time. 
-        // to add a new state to the front (eg needed for health and hunger) change previous first "if" to an "else if"
-        // and add a new if to the front.  
+        // Continuous target checking every 2 seconds (except when eating or gearing)
+        if (state !== "EATING" && state !== "gearing" && canDoAction("targetCheck")) {
+            checkForClosestTarget()
+        }
+
+        // Bot state priority: 1. gear -> 2. heal -> 3. eat -> 4. ally -> 5. attack -> 6. move -> 7. target
         
-        // Eating has highest priority and cannot be interrupted
-        if(state == "EATING"){
-            // Check if we're still hungry while eating
+        // 1. Equip armor - highest priority
+        if(state === "gearing"){
+            gear()
+        }
+        // 2. Heal - second priority
+        else if(bot.health < HEALTH_THRESHOLD && canHealSelf()){
+            heal()
+        }
+        // 3. Eat food - third priority, interrupts combat but not gearing/healing
+        else if(bot.food <= HUNGER_THRESHOLD && canEatFood()){
+            eat()
+        }
+        // Special handling for eating state - check if still hungry
+        else if(state == "EATING"){
             if (bot.food > HUNGER_THRESHOLD) {
-                // No longer hungry, stop eating
                 console.log('No longer hungry, stopping eating')
                 state = "IDLE"
                 equipStrongestSword()
             }
             return
         }
-        // Check if too far from ally - high priority after eating
+        // 4. Return to ally - fourth priority
         else if(isTooFarFromAlly()){
             return_to_ally()
         }
-        else if(bot.health < HEALTH_THRESHOLD && canHealSelf()){
-            heal()
-            
-        }
-        else if(state === "gearing"){
-            gear()
-        }
-        else if(bot.food <= HUNGER_THRESHOLD && canEatFood()){
-            eat()
-        }
-        else if(target == null){
-            get_new_target()
-        }
-        else if (!target || !target.position || bot.entity.position.distanceTo(target.position) > REACH_MAX){
-            if(!target || !target.position || bot.entity.position.distanceTo(target.position) > KITE_RANGE){
-                console.log("kited or target lost")
-                bot_reset()
-                return
-            }
-            // Check for pearling opportunity before moving
-            if(shouldPearl()){
-                pearl_to_target()
-            } else {
-                move_to_target()
-            }
-        }
-        else{
+        // 5. Attack target - fifth priority (not while eating)
+        else if(target && target.position && bot.entity.position.distanceTo(target.position) <= REACH_MAX && state !== "EATING"){
             attack_target()
+        }
+        // 6. Move to target - sixth priority (not while eating)
+        else if(target && target.position && bot.entity.position.distanceTo(target.position) <= KITE_RANGE && state !== "EATING"){
+            move_to_target()
+        }
+        // Target too far or lost
+        else if(target && target.position && bot.entity.position.distanceTo(target.position) > KITE_RANGE){
+            console.log("Target too far, resetting")
+            bot_reset()
+        }
+        // 7. Get new target - lowest priority
+        else{
+            get_new_target()
         }
 
         //logging
@@ -193,74 +190,7 @@ bot.on('physicsTick', async () => {
 
 //STATE FUNCTIONS
 
-async function eat() {
-    // Start eating if not already eating and cooldown allows
-    if (state !== "EATING" && canDoAction("eating")) {
-        state = "EATING"
-        const food = await getBestFood()
-        
-        if (!food) {
-            console.log('No valid food found in inventory')
-            state = "IDLE"
-            return
-        }
-        
-        console.log('Started eating - will continue until no longer hungry')
-        // Don't reset state here - let it continue until hunger is satisfied
-    }
-}
-
-async function heal() {
-    if (state !="HEALING" && canDoAction("healing")){
-        state = "HEALING"
-
-
-        // Find a splash instant health potion in inventory
-        const potion = await GetItemInInventory('splash_potion')
-
-        if (!potion) {
-            console.log('No healing splash potion found')
-            state = "IDLE"
-            return
-        }
-        
-        try {
-            
-            // Add a short random delay before buffing (between 0.05 and 0.5 seconds)
-            const ticks = Math.floor(Math.random() * 10) + 1;
-            await bot.waitForTicks(ticks);
-          
-            // Turn away from target if there is one, otherwise look at feet
-            if (target) {
-                // Calculate direction away from target
-                const awayFromTarget = bot.entity.position.minus(target.position).normalize()
-                const lookPosition = bot.entity.position.plus(awayFromTarget.scaled(2))
-                await bot.lookAt(lookPosition, true)
-                bot.setControlState('forward', true)
-            } 
-            
-            if(bot.health < 7){
-                await bot.activateItem(false, new Vec3(0, -1, 0))
-                COOLDOWN.set('healing',500) //double pot
-            }else{
-                await bot.activateItem(false, new Vec3(0, -1, 0))
-                COOLDOWN.set('healing',1000)
-            }
-
-            // Stop moving forward after throwing
-            bot.setControlState('forward', false)
-
-            // Immediately resume normal state after healing and re-equip sword
-            state = "IDLE"
-            equipStrongestSword()
-        } catch (error) {
-            console.log('Error during healing:', error.message)
-            state = "IDLE"
-            equipStrongestSword()
-        }
-    }
-}
-
+// 1. EQUIP ARMOR
 function gear(){
     state = "GEARING UP"
     
@@ -277,39 +207,84 @@ function gear(){
     }
 }
 
-function get_new_target(){
-    state = "LOOKING FOR TARGET"
-    
-    // Look around for targets
-    if (canDoAction("lookAround")) {
-        lookAround()
-    }
-    
-    potential_target = get_nearest_enemy_player()
-    if (potential_target) {
-        const distance = bot.entity.position.distanceTo(potential_target.position)
-        
-        // Check if target is within close range OR within line of sight range
-        if (distance < TARGETING_RANGE || 
-            (distance <= LINE_OF_SIGHT_RANGE && canSeeTarget(potential_target))) {
-            target = potential_target
-            console.log(`Target acquired: ${target.username} at ${Math.floor(distance)} blocks ${distance > TARGETING_RANGE ? '(line of sight)' : '(close range)'}`)
+// 2. HEAL
+async function heal() {
+    if (state !="HEALING" && canDoAction("healing")){
+        state = "HEALING"
+
+        // Find a splash instant health potion in inventory
+        const potion = await GetItemInInventory('splash_potion')
+
+        if (!potion) {
+            console.log('No healing splash potion found')
+            state = "IDLE"
             return
         }
-    }
-    
-    // No target found, patrol only if cooldown allows (16-32 seconds)
-    if (canDoAction("patrol")) {
-        // Set random cooldown between 16-32 seconds for next patrol
-        const nextPatrolCooldown = (16 + Math.random() * 16) * 1000; // 16000-32000ms
-        COOLDOWN.set('patrol', nextPatrolCooldown);
-        patrol()
-    } else {
-        // Just sit idle between patrols
-        state = "IDLE"
+        
+        try {
+            // Add a short random delay before healing (between 0.05 and 0.5 seconds)
+            const ticks = Math.floor(Math.random() * 10) + 1;
+            await bot.waitForTicks(ticks);
+          
+            // Turn away from target if there is one and run away while healing
+            if (target) {
+                // Calculate direction away from target
+                const awayFromTarget = bot.entity.position.minus(target.position).normalize()
+                const lookPosition = bot.entity.position.plus(awayFromTarget.scaled(2))
+                await bot.lookAt(lookPosition, true)
+                
+                // Start sprinting away from target
+                bot.setControlState('sprint', true)
+                bot.setControlState('forward', true)
+                console.log('Running away from target while healing')
+            } 
+            
+            if(bot.health < 7){
+                await bot.activateItem(false, new Vec3(0, -1, 0))
+                COOLDOWN.set('healing',500) //double pot
+            }else{
+                await bot.activateItem(false, new Vec3(0, -1, 0))
+                COOLDOWN.set('healing',1000)
+            }
+
+            // Stop moving after healing
+            bot.setControlState('sprint', false)
+            bot.setControlState('forward', false)
+
+            // Immediately resume normal state after healing and re-equip sword
+            state = "IDLE"
+            equipStrongestSword()
+            console.log('Healing complete, resuming combat')
+        } catch (error) {
+            console.log('Error during healing:', error.message)
+            // Stop movement on error
+            bot.setControlState('sprint', false)
+            bot.setControlState('forward', false)
+            state = "IDLE"
+            equipStrongestSword()
+        }
     }
 }
 
+// 3. EAT FOOD
+async function eat() {
+    // Start eating if not already eating and cooldown allows
+    if (state !== "EATING" && canDoAction("eating")) {
+        state = "EATING"
+        const food = await getBestFood()
+        
+        if (!food) {
+            console.log('No valid food found in inventory')
+            state = "IDLE"
+            return
+        }
+        
+        console.log('Started eating food - will jump and face away from target')
+        // Don't reset state here - let it continue until hunger is satisfied
+    }
+}
+
+// 4. RETURN TO ALLY
 function return_to_ally(){
     state = "RETURNING TO ALLY"
     
@@ -331,48 +306,7 @@ function return_to_ally(){
     bot.pathfinder.setGoal(new goals.GoalFollow(nearestAlly, 3)) // Follow within 3 blocks
 }
 
-async function move_to_target(){
-    // Check if target still exists and has position
-    if (!target || !target.position) {
-        console.log("Target lost during movement")
-        bot_reset()
-        return
-    }
-    
-    state = "MOVING TO TARGET"
-    
-    // Start moving to target
-    bot.setControlState('sprint', true)
-    bot.pathfinder.setGoal(new goals.GoalFollow(target, 1))
-    
-    // Check for enchanted apple eating (15% chance every 16 seconds)
-    if (canDoAction("enchantedAppleCheck")) {
-        const timeSinceLastApple = Date.now() - lastEnchantedAppleTime
-        
-        // Only try to eat if it's been more than 30 seconds since last apple
-        if (timeSinceLastApple > 30000) {
-            const appleChance = Math.random()
-            if (appleChance < 0.15) { // 15% chance
-                tryEatEnchantedApple()
-            }
-        } else {
-            console.log(`Enchanted apple eaten too recently (${Math.floor((30000 - timeSinceLastApple) / 1000)}s remaining)`)
-        }
-    }
-    
-    // Constantly swing sword if target is within 10 blocks
-    if (target && target.position) {
-        const distance = bot.entity.position.distanceTo(target.position)
-        if (distance <= 10 && canDoAction("movementSwing")) {
-            // Look at target and swing (no damage)
-            const eyePos = target.position.offset(0, 1.62, 0);
-            bot.lookAt(eyePos);
-            bot.swingArm()
-            console.log("Movement swinging - target within 10 blocks")
-        }
-    }
-}
-
+// 5. ATTACK TARGET
 function attack_target(){
     // Check if target still exists
     if (!target || !target.position) {
@@ -388,23 +322,16 @@ function attack_target(){
     
     const distance = bot.entity.position.distanceTo(target.position)
     
-    // Check for combat apple eating (32% chance every 10-23 seconds)
-    if (canDoAction("combatAppleCheck")) {
-        // Set random cooldown between 10-23 seconds for next check
-        const nextCooldown = (10 + Math.random() * 13) * 1000; // 10000-23000ms
-        COOLDOWN.set('combatAppleCheck', nextCooldown);
-        
-        const appleChance = Math.random()
-        if (appleChance < 0.32) { // 32% chance
-            tryCombatApple()
-        }
-    }
+    // Handle strafing substate
+    handleStrafing()
     
-    // Generate random reach for this attack (between 2.85 - 3.68)
+    // Calculate progressive miss chance based on consecutive misses
+    const baseMissChance = MISS_CHANCE_BASE + Math.random() * (MISS_CHANCE_MAX_BASE - MISS_CHANCE_BASE)
+    const streakIncrease = consecutiveMisses * (MISS_STREAK_INCREASE_MIN + Math.random() * (MISS_STREAK_INCREASE_MAX - MISS_STREAK_INCREASE_MIN))
+    const currentMissChance = Math.min(baseMissChance + streakIncrease, 0.85) // Cap at 85% miss chance
+    
+    // Generate random reach for this attack (between 2.85 - 3.90)
     const currentReach = REACH_MIN + Math.random() * (REACH_MAX - REACH_MIN)
-    
-    // Generate random miss chance for this attack (between 18% - 20%)
-    const currentMissChance = MISS_CHANCE_MIN + Math.random() * (MISS_CHANCE_MAX - MISS_CHANCE_MIN)
     
     if(canDoAction("attack")){
         if (distance <= currentReach) {
@@ -413,11 +340,19 @@ function attack_target(){
             if (missRoll < currentMissChance) {
                 // Miss - swing but don't attack
                 bot.swingArm()
-                console.log(`Attack missed! (${(missRoll * 100).toFixed(1)}% roll, ${(currentMissChance * 100).toFixed(1)}% threshold)`)
+                consecutiveMisses++
+                console.log(`Attack missed! (${(missRoll * 100).toFixed(1)}% roll, ${(currentMissChance * 100).toFixed(1)}% threshold) - Miss streak: ${consecutiveMisses}`)
+                
+                // Reset miss streak after 5 consecutive attempts
+                if (consecutiveMisses >= MISS_STREAK_RESET) {
+                    console.log(`Miss streak reset after ${MISS_STREAK_RESET} consecutive attempts`)
+                    consecutiveMisses = 0
+                }
             } else {
-                // Hit - do real damage
+                // Hit - do real damage and reset miss streak
                 bot.attack(target)
-                console.log(`Attack hit! Reach: ${currentReach.toFixed(2)}, Miss chance was: ${(currentMissChance * 100).toFixed(1)}%`)
+                console.log(`Attack hit! Reach: ${currentReach.toFixed(2)}, Miss chance was: ${(currentMissChance * 100).toFixed(1)}% - Miss streak reset`)
+                consecutiveMisses = 0 // Reset miss streak on successful hit
             }
         } else if (distance <= 8) {
             // Within 8 blocks but outside attack range - fake swing
@@ -426,70 +361,109 @@ function attack_target(){
     }
 }
 
-function shouldPearl(){
-    if (!canDoAction("pearling") || !hasItemInInventory('ender_pearl') || !target || !target.position) {
-        return false
+// Handle strafing substate during combat
+function handleStrafing() {
+    const now = Date.now()
+    
+    // Check if current strafe movement should end
+    if (strafeDirection && now >= strafeEndTime) {
+        // Stop current strafe movement
+        bot.setControlState('left', false)
+        bot.setControlState('right', false)
+        bot.setControlState('back', false)
+        strafeDirection = null
+        console.log("Strafe movement ended")
     }
     
-    const distance = bot.entity.position.distanceTo(target.position)
-    
-    // Don't pearl if too close or too far
-    if (distance < PEARL_MIN_DISTANCE || distance > PEARL_MAX_DISTANCE) {
-        return false
+    // Make new strafe decision every 4 seconds
+    if (canDoAction("strafeDecision")) {
+        // Completely random movement selection
+        const movementOptions = ['left', 'right', 'back', 'none']
+        const randomMovement = movementOptions[Math.floor(Math.random() * movementOptions.length)]
+        
+        // Stop any current movement first
+        bot.setControlState('left', false)
+        bot.setControlState('right', false)
+        bot.setControlState('back', false)
+        
+        if (randomMovement === 'left' || randomMovement === 'right') {
+            const strafeDuration = 1000 + Math.random() * 2000 // Random 1-3 seconds
+            
+            bot.setControlState(randomMovement, true)
+            strafeDirection = randomMovement
+            strafeEndTime = now + strafeDuration
+            
+            console.log(`Started strafing ${randomMovement} for ${(strafeDuration/1000).toFixed(1)}s`)
+            
+        } else if (randomMovement === 'back') {
+            const backDuration = 500 // 0.5 seconds
+            
+            bot.setControlState('back', true)
+            strafeDirection = 'back'
+            strafeEndTime = now + backDuration
+            
+            console.log(`Started backing up for 0.5s`)
+            
+        } else {
+            // 'none' - stay still or continue current movement
+            strafeDirection = null
+            console.log("No strafe movement this cycle")
+        }
     }
     
-    let pearlChance = 0
-    if (distance <= 12) {
-        pearlChance = PEARL_CLOSE_PROB
-    } else if (distance <= 18) {
-        pearlChance = PEARL_MID_PROB
-    } else {
-        pearlChance = PEARL_FAR_PROB
+    // 2% chance to jump during strafing
+    if (strafeDirection && Math.random() < 0.02) {
+        bot.setControlState('jump', true)
+        console.log("Strafing jump!")
+        // Jump will automatically stop after a tick
+        setTimeout(() => {
+            bot.setControlState('jump', false)
+        }, 50)
     }
-    
-    return Math.random() < pearlChance
 }
 
-async function pearl_to_target(){
+// 6. MOVE TO TARGET
+async function move_to_target(){
+    // Check if target still exists and has position
     if (!target || !target.position) {
-        console.log("Target lost during pearling")
+        console.log("Target lost during movement")
         bot_reset()
         return
     }
     
-    state = "PEARLING"
-    console.log("Attempting to pearl to target")
+    state = "MOVING TO TARGET"
     
-    try {
-        // Equip enderpearl
-        const pearl = await GetItemInInventory('ender_pearl')
-        if (!pearl) {
-            console.log('No enderpearl found')
-            state = "IDLE"
-            return
+    // Calculate the minimum attack range (just outside of REACH_MIN)
+    const minAttackRange = REACH_MIN + 0.1 // Small buffer to avoid getting inside the target
+    
+    // Start moving to target, but stop at min attack range
+    bot.setControlState('sprint', true)
+    bot.pathfinder.setGoal(new goals.GoalFollow(target, minAttackRange))
+    
+    // Constantly swing sword if target is within 10 blocks
+    if (target && target.position) {
+        const distance = bot.entity.position.distanceTo(target.position)
+        if (distance <= 10 && canDoAction("movementSwing")) {
+            // Look at target and swing (no damage)
+            const eyePos = target.position.offset(0, 1.62, 0);
+            bot.lookAt(eyePos);
+            bot.swingArm()
+            console.log("Movement swinging - target within 10 blocks")
         }
-        
-        // Simple targeting - just aim at the target's current position
-        const targetPos = target.position.offset(0, 1, 0) // Aim at body height
-        
-        // Look at the target position
-        await bot.lookAt(targetPos, true)
-        
-        // Add small random delay for more human-like timing
-        const delay = Math.floor(Math.random() * 5) + 1
-        await bot.waitForTicks(delay)
-        
-        // Throw the pearl
-        await bot.activateItem()
-        console.log("Pearl thrown!")
-        
-        // Re-equip sword immediately
-        equipStrongestSword()
-        state = "IDLE"
-        
-    } catch (error) {
-        console.log('Error during pearling:', error.message)
-        equipStrongestSword()
+    }
+}
+
+// 7. GET NEW TARGET
+function get_new_target(){
+    state = "LOOKING FOR TARGET"
+    
+    // Look around for targets
+    if (canDoAction("lookAround")) {
+        lookAround()
+    }
+    
+    // Just sit idle if no target found
+    if (!target) {
         state = "IDLE"
     }
 }
@@ -508,118 +482,6 @@ function fakeSwingAtTarget() {
     console.log("Fake swinging at target (visual intimidation)")
 }
 
-async function tryEatEnchantedApple() {
-    try {
-        // Check if bot is already consuming something
-        if (bot.entity.metadata[7]) { // metadata[7] indicates if entity is eating/drinking
-            console.log("Bot is already consuming something, skipping movement apple")
-            return
-        }
-        
-        const hadApple = await GetItemInInventory('enchanted_golden_apple')
-        if (hadApple) {
-            console.log("Eating enchanted golden apple during movement!")
-            await bot.consume()
-            lastEnchantedAppleTime = Date.now()
-            
-            // Re-equip sword after eating
-            equipStrongestSword()
-        } else {
-            console.log("No enchanted golden apple found in inventory")
-        }
-    } catch (error) {
-        console.log('Error eating enchanted apple:', error.message)
-        equipStrongestSword()
-    }
-}
-
-async function tryCombatApple() {
-    try {
-        // Check if bot is already consuming something
-        if (bot.entity.metadata[7]) { // metadata[7] indicates if entity is eating/drinking
-            console.log("Bot is already consuming something, skipping combat apple")
-            return
-        }
-        
-        const now = Date.now()
-        const timeSinceEnchantedApple = now - lastEnchantedAppleTime
-        const timeSinceGoldenApple = now - lastGoldenAppleTime
-        
-        // Check if any apple was eaten within the last 30 seconds
-        if (timeSinceEnchantedApple < 30000 || timeSinceGoldenApple < 30000) {
-            // Set a random delay of 5-8 seconds before trying again
-            const delay = (5 + Math.random() * 3) * 1000; // 5000-8000ms
-            COOLDOWN.set('combatAppleCheck', delay);
-            console.log(`Apple eaten recently, waiting ${Math.floor(delay/1000)}s before trying again`)
-            return
-        }
-        
-        // Try enchanted golden apple first, then regular golden apple
-        let hadApple = await GetItemInInventory('enchanted_golden_apple')
-        if (hadApple) {
-            console.log("Eating enchanted golden apple during combat!")
-            await bot.consume()
-            lastEnchantedAppleTime = now
-            
-            // Re-equip sword after eating
-            equipStrongestSword()
-            return
-        }
-        
-        // If no enchanted apple, try regular golden apple
-        hadApple = await GetItemInInventory('golden_apple')
-        if (hadApple) {
-            console.log("Eating golden apple during combat!")
-            await bot.consume()
-            lastGoldenAppleTime = now
-            
-            // Re-equip sword after eating
-            equipStrongestSword()
-        } else {
-            console.log("No golden apples found in inventory for combat eating")
-        }
-    } catch (error) {
-        console.log('Error eating combat apple:', error.message)
-        equipStrongestSword()
-    }
-}
-
-function patrol() {
-    state = "PATROLLING"
-    
-    // If no patrol center set, use current position
-    if (!patrolCenter) {
-        patrolCenter = bot.entity.position.clone()
-    }
-    
-    // Check if we need a new patrol target or if we're close to current target
-    if (!currentPatrolTarget || 
-        bot.entity.position.distanceTo(currentPatrolTarget) < 2 || 
-        canDoAction("patrolMovement")) {
-        
-        // Generate random patrol point 3-16 blocks from patrol center
-        const angle = Math.random() * Math.PI * 2 // Random angle
-        const distance = 3 + Math.random() * 13 // Random distance 3-16 blocks
-        
-        const x = patrolCenter.x + Math.cos(angle) * distance
-        const z = patrolCenter.z + Math.sin(angle) * distance
-        const y = patrolCenter.y // Keep same Y level for now
-        
-        // Fixed: Use new Vec3() instead of bot.vec3()
-        currentPatrolTarget = new Vec3(x, y, z)
-        console.log(`New patrol destination: ${Math.floor(distance)} blocks from center`)
-        
-        // Move to new patrol target
-        bot.setControlState('sprint', false) // Don't sprint while patrolling
-        bot.pathfinder.setGoal(new goals.GoalNear(currentPatrolTarget.x, currentPatrolTarget.y, currentPatrolTarget.z, 1))
-    }
-    
-    // Continue looking around while patrolling
-    if (canDoAction("lookAround")) {
-        lookAround()
-    }
-}
-
 function lookAround() {
     // Look in a random direction
     const yaw = Math.random() * Math.PI * 2 // Random horizontal rotation
@@ -629,7 +491,69 @@ function lookAround() {
     console.log("Looking around for targets...")
 }
 
-//ALLY SYSTEM FUNCTIONS
+function jumpAndFaceAwayWhileEating() {
+    // Jump while eating
+    bot.setControlState('jump', true);
+    
+    // Face away from target and move forward if there is one
+    if (target && target.position) {
+        try {
+            // Calculate direction away from target
+            const awayFromTarget = bot.entity.position.minus(target.position).normalize();
+            const lookPosition = bot.entity.position.plus(awayFromTarget.scaled(5));
+            bot.lookAt(lookPosition, true).catch(() => {}); // Catch any look errors
+            
+            // Move forward away from target while eating
+            bot.setControlState('forward', true);
+        } catch (error) {
+            // Silently handle any direction calculation errors
+        }
+    } else {
+        // No target, just jump in place
+        bot.setControlState('forward', false);
+    }
+}
+
+//HELPER FUNCTIONS
+
+// Check if bot has a specific effect
+function hasEffect(effectName) {
+    const effect = mcData.effectsByName[effectName]
+    if (!effect) return false
+    
+    return bot.entity.effects && bot.entity.effects[effect.id] !== undefined
+}
+
+function checkForClosestTarget() {
+    const closestEnemy = get_nearest_enemy_player()
+    
+    if (!closestEnemy) {
+        // No enemies found
+        if (target) {
+            console.log("No enemies detected - clearing current target")
+            target = null
+        }
+        return
+    }
+    
+    const distance = bot.entity.position.distanceTo(closestEnemy.position)
+    
+    // Only engage targets within range
+    if (distance > TARGETING_RANGE) {
+        if (target) {
+            console.log(`Closest enemy ${closestEnemy.username} too far (${Math.floor(distance)} blocks) - clearing target`)
+            target = null
+        }
+        return
+    }
+    
+    // Check if we need to switch targets
+    if (!target || target.id !== closestEnemy.id) {
+        const previousTarget = target ? target.username : "none"
+        target = closestEnemy
+        console.log(`Target switch: ${previousTarget} → ${target.username} at ${Math.floor(distance)} blocks (closest enemy)`)
+    }
+}
 
 function isAlly(playerName) {
     return ALLY_LIST.includes(playerName)
@@ -664,50 +588,32 @@ function isTooFarFromAlly() {
     return distance > ALLY_MAX_DISTANCE
 }
 
-//HELPER FUNCTIONS
 function get_nearest_enemy_player(){
-    const nearest = bot.nearestEntity(entity =>
-        entity.type === 'player' &&
-        entity.username !== bot.username &&
-        !isAlly(entity.username) // Exclude allies from targeting
-      )
-    return nearest
-}
-
-function canSeeTarget(target) {
-    if (!target || !target.position) {
-        return false
+    const players = Object.values(bot.players)
+        .map(player => player.entity)
+        .filter(entity => 
+            entity && 
+            entity.type === 'player' &&
+            entity.username !== bot.username &&
+            !isAlly(entity.username) &&
+            entity.position
+        )
+    
+    if (players.length === 0) return null
+    
+    // Find the closest enemy player
+    let closest = null
+    let closestDistance = Infinity
+    
+    for (const player of players) {
+        const distance = bot.entity.position.distanceTo(player.position)
+        if (distance < closestDistance) {
+            closestDistance = distance
+            closest = player
+        }
     }
     
-    try {
-        // Simple line of sight check using raycasting
-        const from = bot.entity.position.offset(0, 1.62, 0) // Bot's eye position
-        const to = target.position.offset(0, 1.62, 0) // Target's eye position
-        
-        // Calculate direction vector
-        const direction = to.minus(from).normalize()
-        const distance = from.distanceTo(to)
-        
-        // Check every block along the line for solid blocks
-        const stepSize = 0.5 // Check every 0.5 blocks
-        for (let i = stepSize; i < distance; i += stepSize) {
-            const checkPos = from.plus(direction.scaled(i))
-            const block = bot.blockAt(checkPos)
-            
-            // If we hit a solid block, line of sight is blocked
-            if (block && block.type !== 0 && !block.transparent) {
-                return false
-            }
-        }
-        
-        console.log(`Line of sight confirmed to ${target.username}`)
-        return true
-        
-    } catch (error) {
-        // If there's an error with line of sight checking, assume we can't see them
-        console.log('Error checking line of sight, assuming blocked')
-        return false
-    }
+    return closest
 }
 
 // Shared helper function for getting items in inventory
@@ -736,7 +642,7 @@ function canHealSelf() {
     return hasItemInInventory('splash_potion')
 }
 
-// Check if bot has any valid food in inventory
+// Check if bot has any valid food
 function canEatFood() {
     return VALID_FOODS.some(food => hasItemInInventory(food))
 }
@@ -746,14 +652,14 @@ async function getBestFood() {
     for (const foodName of VALID_FOODS) {
         const hasFood = await GetItemInInventory(foodName)
         if (hasFood) {
-            console.log(hasFood)
+            console.log(`Found food: ${foodName}`)
             return true
         }
     }
     return false
 }
 
-function getStrongestSword() { //need to update to match the pattern of getBestFood, for consistency. combine with equipStrongestSword.
+function getStrongestSword() {
     const swords = bot.inventory.items().filter(item => item.name.endsWith('_sword'))
     if (swords.length === 0) return null
     const swordOrder = [
@@ -789,8 +695,14 @@ function canDoAction(action){
 function bot_reset(){
     bot.setControlState('sprint', false)
     bot.setControlState('forward', false)
+    bot.setControlState('left', false)
+    bot.setControlState('right', false)
+    bot.setControlState('back', false)
+    bot.setControlState('jump', false)
     target = null
-    currentPatrolTarget = null // Reset patrol target too
+    consecutiveMisses = 0 // Reset miss streak on bot reset
+    strafeDirection = null // Reset strafe state
+    strafeEndTime = 0
     bot.pathfinder.setGoal(null)
     console.log("RESETTING")
 }

@@ -606,3 +606,6 @@ function bot_reset(){
     bot.pathfinder.setGoal(null)
     console.log("RESETTING")
 }
+
+
+// ally system bug. The bot is not recognizing allies properly and may attack them. archer bot also generally sometimes aims strange and doesn't shoot properly.

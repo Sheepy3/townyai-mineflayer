@@ -8,7 +8,7 @@ const Vec3 = require('vec3')
 const bot = mineflayer.createBot({
   host:'107.138.47.146',//host: '173.73.200.194',
   port: 25565,
-  username: 'pvt.asdeoyt@gmail.com',
+  username: 'saiermcasdeo@gmail.com',
   version: '1.21.4',
   auth: 'microsoft', // or 'mojang' for older versions
 });

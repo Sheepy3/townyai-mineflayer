@@ -50,7 +50,7 @@ const ALLY_LIST = ['xtoa', 'AmberClamber'] // Players the bot will not attack
 const ALLY_MAX_DISTANCE = 30 // Maximum distance from allied players
 
 // Valid food items the bot can eat
-const VALID_FOODS = [
+const VALID_FOODS = [  //TODO be ordered by saturation
     'enchanted_golden_apple',
     'golden_apple',
     'golden_carrot',
@@ -76,15 +76,6 @@ COOLDOWN.set('lookAround',2000) // 2 seconds between look around actions
 COOLDOWN.set('targetCheck',2000) // 2 seconds between target checks
 COOLDOWN.set('strafeDecision',4000) // 4 seconds between strafe decisions
 
-/*bot state priority
-1. equip armor [implemented] -> gearing system with cooldown
-2. heal [implemented] -> check if health below 10, throw splash potions away from target with cooldown. if below 7, double pots
-3. eat food [implemented] -> hunger ≤18 interrupts all functions except gearing and healing
-4. return to ally [implemented] -> if too far from ally, return to them
-5. attack target [implemented] -> basic combat with CPS limiting with progressive miss chance
-6. move to target [implemented] -> pathfinding with sprint and kiting
-7. get new target [implemented] -> nearest player within targeting range (excluding allies)
-*/
 
 //INTERRUPT TRIGGERS
 bot.on("death", () => {
@@ -110,6 +101,18 @@ bot.on('whisper', (from, msg) => {
     bot.chat('recieved: ' + msg)
 });
 
+/*bot state priority
+1. equip armor [implemented] -> gearing system with cooldown
+2. heal [implemented] -> check if health below 10, throw splash potions away from target with cooldown. if below 7, double pots
+3. eat food [implemented] -> hunger ≤18 interrupts all functions except gearing and healing
+4. return to ally [implemented] -> if too far from ally, return to them
+5. attack target [implemented] -> basic combat with CPS limiting with progressive miss chance
+6. move to target [implemented] -> pathfinding with sprint and kiting
+7. get new target [implemented] -> nearest player within targeting range (excluding allies)
+*/
+
+
+
 bot.on('physicsTick', async () => {
     // Constantly activate item when in eating state
     if (state === "EATING") {
@@ -125,6 +128,7 @@ bot.on('physicsTick', async () => {
 
 bot.on('physicsTick', async () => {
     try {
+
         // Continuous target checking every 2 seconds (except when eating or gearing)
         if (state !== "EATING" && state !== "gearing" && canDoAction("targetCheck")) {
             checkForClosestTarget()
@@ -171,9 +175,9 @@ bot.on('physicsTick', async () => {
             bot_reset()
         }
         // 7. Get new target - lowest priority
-        else{
+        /*else{
             get_new_target()
-        }
+        }*/
 
         //logging
         if (canDoAction("stateprint")){
@@ -453,8 +457,8 @@ async function move_to_target(){
     }
 }
 
-// 7. GET NEW TARGET
-function get_new_target(){
+// 7. GET NEW TARGET - MARKED FOR DELETION
+/*function get_new_target(){
     state = "LOOKING FOR TARGET"
     
     // Look around for targets
@@ -466,7 +470,7 @@ function get_new_target(){
     if (!target) {
         state = "IDLE"
     }
-}
+}*/
 
 //COSMETIC FUNCTIONS
 

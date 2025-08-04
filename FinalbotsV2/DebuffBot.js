@@ -8,7 +8,7 @@ const Vec3 = require('vec3')
 const bot = mineflayer.createBot({
   host:'107.138.47.146',//host: '173.73.200.194',
   port: 25565,
-  username: 'pvt.asdeoyt@gmail.com',
+  username: 'juniorkittol@gmail.com',
   version: '1.21.4',
   auth: 'microsoft', // or 'mojang' for older versions
 });
@@ -34,24 +34,20 @@ const TARGETING_RANGE = 25 // Close range targeting
 const KITE_RANGE = 50
 const REACH_MIN = 2.85 // Minimum attack reach
 const REACH_MAX = 3.68 // Maximum attack reach
-const MISS_CHANCE_BASE = 0.04 // 18% base miss chance
-const MISS_CHANCE_MAX_BASE = 0.14 // 20% maximum base miss chance
+const MISS_CHANCE_BASE = 0.02 // 18% base miss chance
+const MISS_CHANCE_MAX_BASE = 0.05 // 20% maximum base miss chance
 const MISS_STREAK_INCREASE_MIN = 0.05 // 5% minimum increase per consecutive miss
 const MISS_STREAK_INCREASE_MAX = 0.12 // 12% maximum increase per consecutive miss
 const MISS_STREAK_RESET = 5 // Reset miss streak after 5 attempts
-const CPS = 16 //sheepy cps
+const CPS = 13 //sheepy cps
 const HEALTH_THRESHOLD = 10
 const HUNGER_THRESHOLD = 18
 const COOLDOWN = new Map()
 const LASTACTION = new Map()
 
-// Debuff potion IDs (custom, example: 17, 29, 38)
-const DEBUFF_POTION_IDS = [17, 29, 38]
-let lastDebuffTime = 0
-
 // Ally system constants
-const ALLY_LIST = ['CowardlyFireBo1t'] // Players the bot will not attack
-const ALLY_MAX_DISTANCE = 15 // Maximum distance from allied players
+const ALLY_LIST = ['Asdeo', 'Sophomania'] // Players the bot will not attack
+const ALLY_MAX_DISTANCE = 7.5 // Maximum distance from allied players
 
 // Valid food items the bot can eat
 const VALID_FOODS = [
@@ -79,7 +75,6 @@ COOLDOWN.set('movementSwing',75) // ~13 CPS for movement swinging
 COOLDOWN.set('lookAround',2000) // 2 seconds between look around actions
 COOLDOWN.set('targetCheck',2000) // 2 seconds between target checks
 COOLDOWN.set('strafeDecision',4000) // 4 seconds between strafe decisions
-COOLDOWN.set('debuff', 1000); // 3 minutes in ms
 
 /*bot state priority
 1. equip armor [implemented] -> gearing system with cooldown
@@ -217,10 +212,11 @@ async function heal() {
     if (state !="HEALING" && canDoAction("healing")){
         state = "HEALING"
 
-        // Only use splash potion with id 25 for healing
-        const potion = getHealingPotion25()
+        // Find a splash instant health potion in inventory
+        const potion = await GetItemInInventory('splash_potion')
+
         if (!potion) {
-            console.log('No healing splash potion (ID 25) found')
+            console.log('No healing splash potion found')
             state = "IDLE"
             return
         }
@@ -243,7 +239,6 @@ async function heal() {
                 console.log('Running away from target while healing')
             } 
             
-            await bot.equip(potion, 'hand')
             if(bot.health < 7){
                 await bot.activateItem(false, new Vec3(0, -1, 0))
                 COOLDOWN.set('healing',500) //double pot
@@ -269,27 +264,6 @@ async function heal() {
             equipStrongestSword()
         }
     }
-}
-
-// Helper: Find splash potion with id 25
-function getHealingPotion25() {
-    return bot.inventory.items().find(item => {
-        if (item.name !== 'splash_potion') return false
-        const potionId = getPotionId(item)
-        return potionId === 25
-    })
-}
-
-// Helper: Find a random debuff potion in inventory
-function getDebuffPotion() {
-    const potions = bot.inventory.items().filter(item => {
-        if (item.name !== 'splash_potion') return false
-        const potionId = getPotionId(item)
-        return DEBUFF_POTION_IDS.includes(potionId)
-    })
-    if (potions.length === 0) return null
-    // Pick one at random
-    return potions[Math.floor(Math.random() * potions.length)]
 }
 
 // 3. EAT FOOD
@@ -340,42 +314,25 @@ function attack_target(){
         bot_reset()
         return
     }
-
-    // Do not attack allies
-    if (isAlly(target.username)) {
-        console.log(`Target ${target.username} is an ally, not attacking.`)
-        bot_reset()
-        return
-    }
-
+    
     state = "ATTACKING TARGET"
     // Look at the target's eye level (1.62 above position.y for players)
     const eyePos = target.position.offset(0, 1.62, 0);
     bot.lookAt(eyePos);
-
+    
     const distance = bot.entity.position.distanceTo(target.position)
-
-    // 5% chance to throw a debuff before attacking, and only if not on cooldown
-    if (Math.random() < 0.05 && canDoAction("debuff")) {
-        console.log("Attempting to throw a debuff at target...");
-        debuffTarget().catch((err) => {
-            console.log("Debuff error (from attack_target):", err?.message || err);
-        });
-        // Optionally, you can return here if you want to skip the attack when debuffing
-        // return;
-    }
-
+    
     // Handle strafing substate
     handleStrafing()
-
+    
     // Calculate progressive miss chance based on consecutive misses
     const baseMissChance = MISS_CHANCE_BASE + Math.random() * (MISS_CHANCE_MAX_BASE - MISS_CHANCE_BASE)
     const streakIncrease = consecutiveMisses * (MISS_STREAK_INCREASE_MIN + Math.random() * (MISS_STREAK_INCREASE_MAX - MISS_STREAK_INCREASE_MIN))
     const currentMissChance = Math.min(baseMissChance + streakIncrease, 0.85) // Cap at 85% miss chance
-
+    
     // Generate random reach for this attack (between 2.85 - 3.90)
     const currentReach = REACH_MIN + Math.random() * (REACH_MAX - REACH_MIN)
-
+    
     if(canDoAction("attack")){
         if (distance <= currentReach) {
             // Within attack range - check for miss
@@ -385,7 +342,7 @@ function attack_target(){
                 bot.swingArm()
                 consecutiveMisses++
                 console.log(`Attack missed! (${(missRoll * 100).toFixed(1)}% roll, ${(currentMissChance * 100).toFixed(1)}% threshold) - Miss streak: ${consecutiveMisses}`)
-
+                
                 // Reset miss streak after 5 consecutive attempts
                 if (consecutiveMisses >= MISS_STREAK_RESET) {
                     console.log(`Miss streak reset after ${MISS_STREAK_RESET} consecutive attempts`)
@@ -511,67 +468,6 @@ function get_new_target(){
     }
 }
 
-// 8. DEBUFFING STATE
-async function debuffTarget() {
-    if (!target || !target.position) {
-        console.log("Debuff: No valid target or position.");
-        return;
-    }
-    if (isAlly(target.username)) {
-        console.log(`Debuff: Target ${target.username} is an ally, not debuffing.`);
-        state = "IDLE";
-        return;
-    }
-    state = "DEBUFFING";
-    const potion = getDebuffPotion();
-    if (!potion) {
-        console.log('Debuff: No debuff potion found');
-        state = "IDLE";
-        return;
-    }
-    try {
-        console.log(`Debuff: Equipping potion (ID: ${getPotionId(potion)})`);
-        // Stop movement and swinging before throwing
-        bot.clearControlStates && bot.clearControlStates();
-        bot.setControlState('sprint', false);
-        bot.setControlState('forward', false);
-        bot.setControlState('left', false);
-        bot.setControlState('right', false);
-        bot.setControlState('back', false);
-        bot.setControlState('jump', false);
-
-        await bot.equip(potion, 'hand');
-        // Wait a short time to ensure the item is equipped
-        await bot.waitForTicks(2);
-
-        // Confirm potion equipped
-        if (!bot.heldItem || bot.heldItem.type !== potion.type) {
-            console.log('Debuff: Failed to equip debuff potion');
-            state = "IDLE";
-            equipStrongestSword();
-            return;
-        }
-        // Look at target's eye level
-        const eyePos = target.position.offset(0, 1.62, 0);
-        await bot.lookAt(eyePos);
-
-        // Wait a tick to ensure look is complete
-        await bot.waitForTicks(1);
-
-        // Actually throw the potion
-        console.log(`Debuff: Throwing potion (ID: ${getPotionId(potion)}) at ${target.username}`);
-        await bot.activateItem(false, new Vec3(0, -1, 0));
-        console.log(`Debuff: Potion thrown!`);
-
-        // Wait a short time before re-equipping sword
-        await bot.waitForTicks(2);
-    } catch (err) {
-        console.log('Debuff error:', err.message);
-    }
-    state = "IDLE";
-    equipStrongestSword();
-}
-
 //COSMETIC FUNCTIONS
 
 function fakeSwingAtTarget() {
@@ -660,7 +556,9 @@ function checkForClosestTarget() {
 }
 
 function isAlly(playerName) {
-    return ALLY_LIST.includes(playerName)
+    const isAllyResult = ALLY_LIST.includes(playerName)
+    console.log(`Checking if ${playerName} is ally: ${isAllyResult} (Ally list: ${ALLY_LIST.join(', ')})`)
+    return isAllyResult
 }
 
 function getNearestAlly() {
@@ -693,17 +591,43 @@ function isTooFarFromAlly() {
 }
 
 function get_nearest_enemy_player(){
+    console.log('Checking for enemy players...')
     const players = Object.values(bot.players)
         .map(player => player.entity)
-        .filter(entity => 
-            entity && 
-            entity.type === 'player' &&
-            entity.username !== bot.username &&
-            !isAlly(entity.username) &&
-            entity.position
-        )
+        .filter(entity => {
+            if (!entity) {
+                return false
+            }
+            console.log(`Found entity: ${entity.username} (type: ${entity.type})`)
+            
+            if (entity.type !== 'player') {
+                console.log(`  - Skipping ${entity.username}: not a player`)
+                return false
+            }
+            
+            if (entity.username === bot.username) {
+                console.log(`  - Skipping ${entity.username}: is bot itself`)
+                return false
+            }
+            
+            if (isAlly(entity.username)) {
+                console.log(`  - Skipping ${entity.username}: is ally`)
+                return false
+            }
+            
+            if (!entity.position) {
+                console.log(`  - Skipping ${entity.username}: no position data`)
+                return false
+            }
+            
+            console.log(`  - ${entity.username} is a valid enemy target`)
+            return true
+        })
     
-    if (players.length === 0) return null
+    if (players.length === 0) {
+        console.log('No valid enemy players found')
+        return null
+    }
     
     // Find the closest enemy player
     let closest = null
@@ -711,12 +635,14 @@ function get_nearest_enemy_player(){
     
     for (const player of players) {
         const distance = bot.entity.position.distanceTo(player.position)
+        console.log(`Distance to ${player.username}: ${distance.toFixed(2)} blocks`)
         if (distance < closestDistance) {
             closestDistance = distance
             closest = player
         }
     }
     
+    console.log(`Closest enemy: ${closest ? closest.username : 'none'} at ${closestDistance.toFixed(2)} blocks`)
     return closest
 }
 
@@ -743,8 +669,7 @@ function getPotionId(item) {
 
 // Buff logic: checks for any splash instant health potion (strong or regular)
 function canHealSelf() {
-    // Only heal if splash potion with id 25 exists
-    return bot.inventory.items().some(item => item.name === 'splash_potion' && getPotionId(item) === 25)
+    return hasItemInInventory('splash_potion')
 }
 
 // Check if bot has any valid food
@@ -811,6 +736,3 @@ function bot_reset(){
     bot.pathfinder.setGoal(null)
     console.log("RESETTING")
 }
-
-
-// Main issue with current debuff bot is that it doesn't handle debuffing properly. It debuffs itself and it will not debuff the target properly.

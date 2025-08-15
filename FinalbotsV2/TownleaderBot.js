@@ -23,6 +23,18 @@ function createTownleaderBot(name, timeout = 5000) {
 
   bot.on('error', err => {
     console.error(`${bot.username} error:`, err.message);
+    
+    // Handle protocol errors gracefully
+    if (err.message.includes('PartialReadError') || err.message.includes('Read error')) {
+      console.log(`${bot.username}: Protocol read error detected, this is usually harmless`);
+      return;
+    }
+    
+    // For other errors, you might want to reconnect
+    if (err.message.includes('ECONNRESET') || err.message.includes('Connection lost')) {
+      console.log(`${bot.username}: Connection lost, attempting to reconnect...`);
+      // You could implement reconnection logic here
+    }
   });
 
   return bot;

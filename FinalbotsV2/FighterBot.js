@@ -28,9 +28,9 @@ var state ="IDLE"
 var target = null
 var consecutiveMisses = 0 // Track consecutive misses for progressive miss chance
 var strafeDirection = null // Current strafe direction (null, 'left', 'right', 'back')
-var strafeEndTime = 0 // When current strafe should end
-var lastStrafeDecision = 0 // When last strafe decision was made
 const TARGETING_RANGE = 25 // Close range targeting
+
+//HITTING
 const REACH_MIN = 2.85 // Minimum attack reach
 const REACH_MAX = 3.68 // Maximum attack reach
 const MISS_CHANCE_BASE = 0.02 // 18% base miss chance
@@ -38,6 +38,13 @@ const MISS_CHANCE_MAX_BASE = 0.12 // 20% maximum base miss chance
 const MISS_STREAK_INCREASE_MIN = 0.05 // 5% minimum increase per consecutive miss
 const MISS_STREAK_INCREASE_MAX = 0.12 // 12% maximum increase per consecutive miss
 const MISS_STREAK_RESET = 5 // Reset miss streak after 5 attempts
+
+//STRAFING
+const LEFT_RIGHT_MIN_MS = 1000;   // 1s
+const LEFT_RIGHT_MAX_MS = 3000;   // 3s
+const BACK_MS           = 500;    // 0.5s
+const JUMP_CHANCE       = 0.02;   // 2%
+const JUMP_HOLD_MS      = 50;     // short tap
 const CPS = 13 //sheepy cps
 const HEALTH_THRESHOLD = 10
 const HUNGER_THRESHOLD = 18
@@ -340,11 +347,7 @@ function attack_target(){
 
 // Handle strafing substate during combat
 function handleStrafing () {
-    const LEFT_RIGHT_MIN_MS = 1000;   // 1s
-    const LEFT_RIGHT_MAX_MS = 3000;   // 3s
-    const BACK_MS           = 500;    // 0.5s
-    const JUMP_CHANCE       = 0.02;   // 2%
-    const JUMP_HOLD_MS      = 50;     // short tap
+   
 
     const stopAllStrafe = () => {
       bot.setControlState('left',  false)

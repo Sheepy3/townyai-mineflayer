@@ -8,7 +8,7 @@ const Vec3 = require('vec3')
 const bot = mineflayer.createBot({
   host:'107.138.47.146',//host: '173.73.200.194',
   port: 25565,
-  username: 'Fighterbot2',
+  username: 'Fighterbot6',
   version: '1.21.4',
   auth: 'offline', // or 'mojang' for older versions
 });
@@ -30,7 +30,7 @@ var consecutiveMisses = 0 // Track consecutive misses for progressive miss chanc
 var strafeDirection = null // Current strafe direction (null, 'left', 'right', 'back')
 const TARGETING_RANGE = 25 // Close range targeting
 
-//HITTING
+//HITTING CONSTANTS
 const REACH_MIN = 2.85 // Minimum attack reach
 const REACH_MAX = 3.68 // Maximum attack reach
 const MISS_CHANCE_BASE = 0.02 // 18% base miss chance
@@ -39,7 +39,7 @@ const MISS_STREAK_INCREASE_MIN = 0.05 // 5% minimum increase per consecutive mis
 const MISS_STREAK_INCREASE_MAX = 0.12 // 12% maximum increase per consecutive miss
 const MISS_STREAK_RESET = 5 // Reset miss streak after 5 attempts
 
-//STRAFING
+//STRAFING CONSTANTS
 const LEFT_RIGHT_MIN_MS = 1000;   // 1s
 const LEFT_RIGHT_MAX_MS = 3000;   // 3s
 const BACK_MS           = 500;    // 0.5s
@@ -52,7 +52,7 @@ const COOLDOWN = new Map()
 const LASTACTION = new Map()
 
 // Ally system constants
-const ALLY_LIST = ['xtoa', 'AmberClamber'] // Players the bot will not attack
+const ALLY_LIST = ['Fighterbot4', 'Fighterbot5',] // Players the bot will not attack
 const ALLY_MAX_DISTANCE = 30 // Maximum distance from allied players
 
 

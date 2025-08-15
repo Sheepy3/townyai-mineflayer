@@ -8,7 +8,7 @@ const Vec3 = require('vec3')
 const bot = mineflayer.createBot({
   host:'107.138.47.146',//host: '173.73.200.194',
   port: 25565,
-  username: 'Fighterbot',
+  username: 'Fighterbot2',
   version: '1.21.4',
   auth: 'offline', // or 'mojang' for older versions
 });
@@ -96,21 +96,6 @@ bot.on('whisper', (from, msg) => {
 7. get new target [implemented] -> nearest player within targeting range (excluding allies)
 */
 
-
-
-/*bot.on('physicsTick', async () => {
-    // Constantly activate item when in eating state
-    if (state === "EATING") {
-        bot.activateItem();
-        
-        // Jump and face away from target while eating
-        jumpAndFaceAwayWhileEating();
-    } else {
-        // Stop jumping when not eating
-        bot.setControlState('jump', false);
-    }
-})*/
-
 bot.on('physicsTick', async () => {
     try {
 
@@ -145,16 +130,6 @@ bot.on('physicsTick', async () => {
         else if(target && target.position){
             move_to_target()
         }
-        // Target too far or lost
-        /*else if(target && target.position && bot.entity.position.distanceTo(target.position) > KITE_RANGE){
-            console.log("Target too far, resetting")
-            bot_reset()
-        }*/
-        // 7. Get new target - lowest priority
-        /*else{
-            get_new_target()
-        }*/
-
         //logging
         if (canDoAction("stateprint")){
             console.log(state)
@@ -364,65 +339,72 @@ function attack_target(){
 }
 
 // Handle strafing substate during combat
-function handleStrafing() {
-    const now = Date.now()
-    
-    // Check if current strafe movement should end
-    if (strafeDirection && now >= strafeEndTime) {
-        // Stop current strafe movement
-        bot.setControlState('left', false)
-        bot.setControlState('right', false)
-        bot.setControlState('back', false)
-        strafeDirection = null
-        console.log("Strafe movement ended")
+function handleStrafing () {
+    const LEFT_RIGHT_MIN_MS = 1000;   // 1s
+    const LEFT_RIGHT_MAX_MS = 3000;   // 3s
+    const BACK_MS           = 500;    // 0.5s
+    const JUMP_CHANCE       = 0.02;   // 2%
+    const JUMP_HOLD_MS      = 50;     // short tap
+
+    const stopAllStrafe = () => {
+      bot.setControlState('left',  false)
+      bot.setControlState('right', false)
+      bot.setControlState('back',  false)
+      strafeDirection = null
     }
-    
-    // Make new strafe decision every 4 seconds
-    if (canDoAction("strafeDecision")) {
-        // Completely random movement selection
-        const movementOptions = ['left', 'right', 'back', 'none']
-        const randomMovement = movementOptions[Math.floor(Math.random() * movementOptions.length)]
-        
-        // Stop any current movement first
-        bot.setControlState('left', false)
-        bot.setControlState('right', false)
-        bot.setControlState('back', false)
-        
-        if (randomMovement === 'left' || randomMovement === 'right') {
-            const strafeDuration = 1000 + Math.random() * 2000 // Random 1-3 seconds
-            
-            bot.setControlState(randomMovement, true)
-            strafeDirection = randomMovement
-            strafeEndTime = now + strafeDuration
-            
-            console.log(`Started strafing ${randomMovement} for ${(strafeDuration/1000).toFixed(1)}s`)
-            
-        } else if (randomMovement === 'back') {
-            const backDuration = 500 // 0.5 seconds
-            
-            bot.setControlState('back', true)
-            strafeDirection = 'back'
-            strafeEndTime = now + backDuration
-            
-            console.log(`Started backing up for 0.5s`)
-            
-        } else {
-            // 'none' - stay still or continue current movement
-            strafeDirection = null
-            console.log("No strafe movement this cycle")
+  
+    const startStrafe = (dir, durationMs) => {
+      // clean start
+      stopAllStrafe()
+      bot.setControlState(dir, true)
+      strafeDirection = dir
+      // prime a cooldown
+      COOLDOWN.set('strafeHold', durationMs)
+      LASTACTION.set('strafeHold', Date.now())
+    }
+
+    // ------- End current strafe when its hold cooldown elapses -------
+    if (strafeDirection && canDoAction('strafeHold')) {
+      stopAllStrafe()
+      console.log('Strafe movement ended')
+    }
+  
+    // new strafe decision
+    if (canDoAction('strafeDecision')) {
+      const choice = ['left', 'right', 'back', 'none'][Math.floor(Math.random() * 4)]
+  
+      switch (choice) {
+        case 'left': {
+          const dur = LEFT_RIGHT_MIN_MS + Math.random() * (LEFT_RIGHT_MAX_MS - LEFT_RIGHT_MIN_MS)
+          startStrafe('left', dur)
+          console.log(`Started strafing left for ${(dur / 1000).toFixed(1)}s`)
+          break
         }
+        case 'right': {
+          const dur = LEFT_RIGHT_MIN_MS + Math.random() * (LEFT_RIGHT_MAX_MS - LEFT_RIGHT_MIN_MS)
+          startStrafe('right', dur)
+          console.log(`Started strafing right for ${(dur / 1000).toFixed(1)}s`)
+          break
+        }
+        case 'back': {
+          startStrafe('back', BACK_MS)
+          console.log('Started backing up for 0.5s')
+          break
+        }
+        default: {
+          stopAllStrafe()
+          console.log('No strafe movement this cycle')
+          break
+        }
+      }
     }
-    
-    // 2% chance to jump during strafing
-    if (strafeDirection && Math.random() < 0.02) {
-        bot.setControlState('jump', true)
-        console.log("Strafing jump!")
-        // Jump will automatically stop after a tick
-        setTimeout(() => {
-            bot.setControlState('jump', false)
-        }, 50)
-    }
-}
+    //
+    if (!strafeDirection) return
+    if (Math.random() >= JUMP_CHANCE) return
+    bot.setControlState('jump', true)
+    setTimeout(() => bot.setControlState('jump', false), JUMP_HOLD_MS)
+  }
+  
 
 // 6. MOVE TO TARGET
 async function move_to_target(){
@@ -455,33 +437,6 @@ async function move_to_target(){
     }
 }
 
-// 7. GET NEW TARGET - MARKED FOR DELETION
-/*function get_new_target(){
-    state = "LOOKING FOR TARGET"
-    
-    // Look around for targets
-    if (canDoAction("lookAround")) {
-        lookAround()
-    }
-    
-    // Just sit idle if no target found
-    if (!target) {
-        state = "IDLE"
-    }
-}*/
-
-//COSMETIC FUNCTIONS
-
-/*function fakeSwingAtTarget() {
-    if (!target || !target.position || !canDoAction("attack")) return
-    
-    const eyePos = target.position.offset(0, 1.62, 0);
-    bot.lookAt(eyePos);
-    
-    bot.swingArm();
-    console.log("Fake swinging at target (visual intimidation)")
-}*/
-
 function idle() {
     // Look in a random direction
     const yaw = Math.random() * Math.PI * 2 // Random horizontal rotation
@@ -491,40 +446,7 @@ function idle() {
     console.log("Looking around for targets...")
 }
 
-/*function jumpAndFaceAwayWhileEating() {
-    // Jump while eating
-    bot.setControlState('jump', true);
-    
-    // Face away from target and move forward if there is one
-    if (target && target.position) {
-        try {
-            // Calculate direction away from target
-            const awayFromTarget = bot.entity.position.minus(target.position).normalize();
-            const lookPosition = bot.entity.position.plus(awayFromTarget.scaled(5));
-            bot.lookAt(lookPosition, true).catch(() => {}); // Catch any look errors
-            bot.setControlState('forward', true);
-        } catch (error) {
-            // Silently handle any direction calculation errors
-        }
-    } else {
-        // No target, just jump in place
-        bot.setControlState('forward', false);
-    }
-}*/
-
 //HELPER FUNCTIONS
-
-// Check if bot has a specific effect
-
-
-
-/*function hasEffect(effectName) {
-    const effect = mcData.effectsByName[effectName]
-    if (!effect) return false
-    
-    return bot.entity.effects && bot.entity.effects[effect.id] !== undefined
-}*/
-
 async function lookAwayFromTarget(){
         const awayFromTarget = bot.entity.position.minus(target.position).normalize();
         const lookPosition = bot.entity.position.plus(awayFromTarget.scaled(5));
@@ -562,13 +484,6 @@ function checkForClosestTarget() {
             closestEnemy = player
         }
     }
-    
-    /*if (!closest) {
-        // No enemies found
-
-    }*/
-    
-    //const distance = bot.entity.position.distanceTo(closestEnemy.position)
     
     // Only engage targets within range
     if (closestDistance > TARGETING_RANGE) {
@@ -620,34 +535,6 @@ function isTooFarFromAlly() {
     return distance > ALLY_MAX_DISTANCE
 }
 
-/*function get_nearest_enemy_player(){
-    const players = Object.values(bot.players)
-        .map(player => player.entity)
-        .filter(entity => 
-            entity && 
-            entity.type === 'player' &&
-            entity.username !== bot.username &&
-            !isAlly(entity.username) &&
-            entity.position
-        )
-    
-    if (players.length === 0) return null
-    
-    // Find the closest enemy player
-    let closest = null
-    let closestDistance = Infinity
-    
-    for (const player of players) {
-        const distance = bot.entity.position.distanceTo(player.position)
-        if (distance < closestDistance) {
-            closestDistance = distance
-            closest = player
-        }
-    }
-    
-    return closest
-}*/
-
 // Shared helper function for getting items in inventory
 async function GetItemInInventory(itemName) {
     let found_item = bot.inventory.items().find(item => item.name === itemName)
@@ -688,12 +575,13 @@ function getBestFood() {
         'golden_carrot',
         'cooked_beef', // steak
         'cooked_porkchop',
+        'cooked_chicken',
         'cooked_rabbit',
         'cooked_mutton',
         'bread',
         'cooked_cod',
         'baked_potato',
-        'cooked_chicken'
+        
     ]
 
     const foods = bot.inventory.items().filter(item => foodOrder.includes(item.name))
@@ -723,14 +611,6 @@ function getStrongestSword() {
         bot.equip(strongestSword, 'hand').catch(() => {})
     }
 }
-
-// Equip strongest sword
-/*function equipStrongestSword(){
-    const strongestSword = getStrongestSword()
-    if (strongestSword && bot.heldItem !== strongestSword) {
-        bot.equip(strongestSword, 'hand').catch(() => {})
-    }
-}*/
 
 function canDoAction(action){
     const now = Date.now();

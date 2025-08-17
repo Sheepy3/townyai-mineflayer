@@ -4,15 +4,22 @@ const { pathfinder, Movements, goals } = require('mineflayer-pathfinder')
 const armorManager = require('mineflayer-armor-manager')
 const Vec3 = require('vec3')
 
+function getArg(flag, fallback = undefined) {
+const i = process.argv.indexOf(flag);
+return i !== -1 && process.argv[i+1] ? process.argv[i + 1]: fallback;
+}
+const BOTNAME = process.env.BOTNAME || getArg('--name', `Fighter_${Math.floor(Math.random()*10000)}`);
+
 //BOT INSTANCE
 const bot = mineflayer.createBot({
   host:'107.138.47.146',//host: '173.73.200.194',
   port: 25565,
-  username: 'Fighterbot5',
+  username: BOTNAME,
   version: '1.21.4',
   auth: 'offline', // or 'mojang' for older versions
 });
 
+  
 //PLUGINS
 bot.loadPlugin(pathfinder)
 bot.loadPlugin(armorManager)
@@ -23,7 +30,13 @@ bot.once('spawn', () => {
     state = "gearing"
 })
 
-//VARIABLES & CONSTANTS
+bot.on('error', (err) => {
+    console.error('[bot error]', err?.message, err);
+  });
+  bot.on('kicked', (reason, loggedIn) => console.log('[KICKED]', reason, 'loggedIn:', loggedIn));
+  bot.on('end', (reason) => console.log('[END]', reason));
+
+  //VARIABLES & CONSTANTS
 var state ="IDLE"
 var target = null
 var consecutiveMisses = 0 // Track consecutive misses for progressive miss chance

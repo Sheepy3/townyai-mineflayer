@@ -79,6 +79,7 @@ async function create_town(bot, townName, ack_code){
 
   await bot.waitForTicks(20);
   bot.chat(`/t create ${townName}`);
+  bot.chat(`/n create ${townName}`);
   bot.chat(`/ack ${ack_code}`);
   //bot.chat(`i created the fucking town`)
 }

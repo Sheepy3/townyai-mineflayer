@@ -5,7 +5,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 const bot = mineflayer.createBot({
-    host:'107.138.47.146',//host: '173.73.200.194',
+    host:'localhost',//'107.138.47.146',//host: '173.73.200.194',
     port: 25565,
     username: 'ADMINBOT',
     version: '1.21.4',

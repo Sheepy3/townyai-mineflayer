@@ -12,7 +12,7 @@ const BOTNAME = process.env.BOTNAME || getArg('--name', `Fighter_${Math.floor(Ma
 
 //BOT INSTANCE
 const bot = mineflayer.createBot({
-  host:'107.138.47.146',//host: '173.73.200.194',
+  host:'localhost',//host: '173.73.200.194',
   port: 25565,
   username: BOTNAME,
   version: '1.21.4',

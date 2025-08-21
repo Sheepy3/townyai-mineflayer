@@ -1,144 +1,80 @@
-const mineflayer      = require('mineflayer');
-//import { randomBytes } from 'crypto'
-const { createTownleaderBot } = require('./TownleaderBot.js');
-const { spawn } = require('child_process');
-const path = require('path');
+// adminbot-minimal.js
+const mineflayer = require('mineflayer')
+const { spawn } = require('child_process')
+const path = require('path')
 
 const bot = mineflayer.createBot({
-    host:'localhost',//'107.138.47.146',//host: '173.73.200.194',
-    port: 25565,
-    username: 'ADMINBOT',
-    version: '1.21.4',
-    auth: 'offline'
-  });
+  host: 'localhost',
+  port: 25565,
+  username: 'ADMINBOT',
+  version: '1.21.4',
+  auth: 'offline'
+})
 
-  const bots = new Map()
-  
-  
-  function spawnBotWithRetry(botName, botType, ack_code, maxRetries = 3, delayMs = 5000) {
-    let attempts = 0;
+function spawnWithRetry({ botName, botType, args = [] }, { max = 3, delayMs = 5000 }) {
+  let attempt = 0
 
-    function trySpawn() {
-      attempts++;
-      let newBot;
-      
-      // Create bot based on type
-      switch (botType.toLowerCase()) {
-        case 'townleader':
-          newBot = createTownleaderBot(botName, 5000);
-          break;
-        case 'fighter':
-          // Spawn FighterBot as a separate Node process
-          const fighterProcess = spawn('node', [
-            path.join(__dirname, 'FighterBot.js'),
-            '--name', botName
-          ], 
-          {
-            stdio: 'inherit',
-            detached: false
-          }
-          );
-          
-          // Store the process reference
-          bots.set(botName, { type: 'fighter', process: fighterProcess });
-          
-          // Handle process events
-          fighterProcess.on('error', (err) => {
-            console.error(`FighterBot process error:`, err);
-            bots.delete(botName);
-          });
-          
-          fighterProcess.on('exit', (code) => {
-            console.log(`FighterBot ${botName} exited with code ${code}`);
-            bots.delete(botName);
-          });
-          
-          newBot = { type: 'fighter', process: fighterProcess };
-          break;
-        default:
-          bot.chat(`Unknown bot type: ${botType}. Supported types: townleader, fighter`);
-          return;
+  function tryOnce() {
+    attempt++
+    const file = botType === 'townleader' ? 'TownleaderBot.js' :
+                 botType === 'fighter'     ? 'FighterBot.js'     : null
+    if (!file) throw new Error(`Unknown botType ${botType}`)
+
+    const child = spawn('node', [path.join(__dirname, file), ...args], {
+      stdio: ['ignore', 'pipe', 'pipe'], // read logs to decide if we continue waiting
+      detached: false,
+      env: {
+        ...process.env,
+        BOTNAME: botName,
+        MC_HOST: 'localhost',
+        MC_PORT: '25565'
       }
-      
-      bots.set(botName, newBot);
+    })
 
-            // Handle different bot types
-      if (newBot.type === 'fighter') {
-        /*// For FighterBot processes, acknowledge immediately since we can't detect login
-        bot.chat(`${botType} ${botName} process started successfully.`);
-        bot.chat(`/ack ${ack_code}`)
-        console.log("acknowledged first ack for FighterBot process")
-        
-        // Handle FighterBot process events
-        newBot.process.on('error', (err) => {
-          console.error(`FighterBot process error:`, err);
-          bots.delete(botName);
-        });
-        
-        newBot.process.on('exit', (code) => {
-          console.log(`FighterBot ${botName} exited with code ${code}`);
-          bots.delete(botName);
-        });*/
+    child.stdout.on('data', d => process.stdout.write(`[${botName}] ${d}`))
+    child.stderr.on('data', d => process.stderr.write(`[${botName}] ${d}`))
+
+    child.on('exit', (code, signal) => {
+      if (code === 101) {
+        if (attempt < max) {
+          console.log(`[${botName}] connect failed (code 101). Retry ${attempt}/${max - 1} in ${delayMs}ms`)
+          setTimeout(tryOnce, delayMs)
+        } else {
+          console.log(`[${botName}] connect failed after ${max} attempts. Giving up.`)
+        }
       } else {
-        // For TownleaderBot, use the original login detection
-        newBot.once('login', () => {
-          bot.chat(`${botType} ${botName} connected successfully.`);
-          bot.chat(`/ack ${ack_code}`)
-          console.log("acknowledged first ack")
-        });
-
-        newBot.once('error', (err) => {
-          bots.delete(botName);
-          if (attempts < maxRetries) {
-            bot.chat(`Could not connect ${botType}: ${err.message}. Retrying (${attempts}/${maxRetries})...`);
-            setTimeout(trySpawn, delayMs);
-          } else {
-            bot.chat(`Failed to connect ${botType} ${botName} after ${maxRetries} attempts.`);
-          }
-        });
+        console.log(`[${botName}] exited. code=${code} signal=${signal ?? 'none'}`)
       }
-      }
-    trySpawn();
+    })
   }
 
-  // Convenience function for backward compatibility
-  function spawnTownleaderWithRetry(botName, ack_code, maxRetries = 3, delayMs = 5000) {
-    return spawnBotWithRetry(botName, 'townleader', ack_code, maxRetries, delayMs);
+  tryOnce()
+}
+
+bot.on('whisper', (_username, message) => {
+  const parts = message.trim().split(/\s+/)
+  const command = (parts[0] || '').toLowerCase()
+
+  // createtown <leaderName> <townName> <ack_code>
+  if (command === 'createtown' && parts.length === 4) {
+    const [ , leaderName, townName, ackCode ] = parts
+    spawnWithRetry(
+      { botName: leaderName, botType: 'townleader', args: ['--town', townName, '--ack', ackCode] },
+      { max: 3, delayMs: 5000 }
+    )    
+    return
   }
 
-  bot.on('whisper', (username, message) => {
-    console.log(`Whisper from ${username}: ${message}`);
-
-    // Split the message into command and arguments
-    const parts = message.trim().split(/\s+/);
-    const command = parts[0].toLowerCase();
-    const args = parts.slice(1);
-
-    // Detect 'createtown' with exactly three arguments
-    if (command === 'createtown' && args.length === 3) {
-      const [leaderName, townName, ack_code] = args;
-      console.log(`Create town with leader: ${leaderName}, town: ${townName}, ackcode: ${ack_code}`);
-
-      try {
-        spawnTownleaderWithRetry(leaderName, ack_code);
-      } catch (err) {
-        console.error(`Failed to spawn ${leaderName}:`, err);
-        bot.chat(`Failed to spawn ${leaderName}: ${err.message}`);
-      }
-    }
-    
-    // Detect 'spawnfighter' with exactly two arguments
-    else if (command === 'spawnfighter' && args.length === 2) {
-      const [fighterName, ack_code] = args;
-      console.log(`Spawn fighter: ${fighterName}, ackcode: ${ack_code}`);
-
-      try {
-        spawnBotWithRetry(fighterName, 'fighter', ack_code);
-      } catch (err) {
-        console.error(`Failed to spawn ${fighterName}:`, err);
-        bot.chat(`Failed to spawn ${fighterName}: ${err.message}`);
-      }
-    }
-  });
+  // spawnfighter <fighterName> <ack_code>
+  if (command === 'spawnfighter' && parts.length === 3) {
+    const [ , fighterName, ackCode ] = parts
+    spawnWithRetry(
+      { botName: fighterName, botType: 'fighter', args: ['--ack', ackCode] },
+      { max: 3, delayMs: 5000 }
+    )
+    return
+  }
 
 
+
+})

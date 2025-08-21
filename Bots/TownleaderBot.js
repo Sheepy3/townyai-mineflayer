@@ -23,7 +23,7 @@ bot.once('login', () => {
 
 // Add spawn event listener for consistency with other bots
 bot.once('spawn', () => {
-  bot.whisper(ADMIN_NAME, ACK)
+  bot.whisper("ADMINBOT", ACK)
   //console.log('Bot spawned and ready for town management.');
 });
 

@@ -11,6 +11,8 @@ const bot = mineflayer.createBot({
   auth: 'offline'
 })
 
+let lastAckCode = null
+
 function spawnWithRetry({ botName, botType, args = [] }, { max = 3, delayMs = 5000 }) {
   let attempt = 0
 
@@ -52,12 +54,16 @@ function spawnWithRetry({ botName, botType, args = [] }, { max = 3, delayMs = 50
 }
 
 bot.on('whisper', (_username, message) => {
+  
+  if (maybeHandleAck(message)) return
+
   const parts = message.trim().split(/\s+/)
   const command = (parts[0] || '').toLowerCase()
 
   // createtown <leaderName> <townName> <ack_code>
   if (command === 'createtown' && parts.length === 4) {
     const [ , leaderName, townName, ackCode ] = parts
+    lastAckCode = ackCode // expect this exact code next
     spawnWithRetry(
       { botName: leaderName, botType: 'townleader', args: ['--town', townName, '--ack', ackCode] },
       { max: 3, delayMs: 5000 }
@@ -68,13 +74,23 @@ bot.on('whisper', (_username, message) => {
   // spawnfighter <fighterName> <ack_code>
   if (command === 'spawnfighter' && parts.length === 3) {
     const [ , fighterName, ackCode ] = parts
+    lastAckCode = ackCode // expect this exact code next
     spawnWithRetry(
       { botName: fighterName, botType: 'fighter', args: ['--ack', ackCode] },
       { max: 3, delayMs: 5000 }
     )
     return
   }
-
-
-
 })
+
+
+function maybeHandleAck(message) {
+  const code = String(message).trim()
+  if (!lastAckCode) return false
+  if (code !== lastAckCode) return false
+
+  bot.chat(`/ack ${code}`)
+  console.log(`[ACK] Accepted. Ran "/ack ${code}".`)
+  lastAckCode = null
+  return true
+}

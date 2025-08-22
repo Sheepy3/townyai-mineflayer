@@ -9,6 +9,7 @@ const i = process.argv.indexOf(flag);
 return i !== -1 && process.argv[i+1] ? process.argv[i + 1]: fallback;
 }
 const BOTNAME = process.env.BOTNAME || getArg('--name', `Fighter_${Math.floor(Math.random()*10000)}`);
+const ACK     = process.env.ACK     || getArg('--ack', '')
 
 //BOT INSTANCE
 const bot = mineflayer.createBot({
@@ -27,14 +28,26 @@ bot.loadPlugin(armorManager)
 // Initial gearing on spawn
 bot.once('spawn', () => {
     console.log('Bot spawned and starting initial gearing.')
+    bot.whisper("ADMINBOT", ACK)
     state = "gearing"
 })
 
-bot.on('error', (err) => {
-    console.error('[bot error]', err?.message, err);
+bot.on('error', err => {
+    console.error(`${bot.username} error:`, err.message);
+    
+    // Handle protocol errors gracefully
+    if (err.message.includes('PartialReadError') || err.message.includes('Read error')) {
+      console.log(`${bot.username}: Protocol read error detected, this is usually harmless`);
+      return;
+    }
+    
+    // For other errors, you might want to reconnect
+    if (err.message.includes('ECONNRESET') || err.message.includes('Connection lost')) {
+      console.log(`${bot.username}: Connection lost, could not connect.`);
+      process.exit(101);
+    //  // You could implement reconnection logic here
+    }
   });
-  bot.on('kicked', (reason, loggedIn) => console.log('[KICKED]', reason, 'loggedIn:', loggedIn));
-  bot.on('end', (reason) => console.log('[END]', reason));
 
   //VARIABLES & CONSTANTS
 var state ="IDLE"

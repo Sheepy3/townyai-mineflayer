@@ -13,8 +13,8 @@ const ACK     = process.env.ACK     || getArg('--ack', '')
 
 //BOT INSTANCE
 const bot = mineflayer.createBot({
-  host:'localhost',//host: '173.73.200.194',
-  port: 25565,
+  host: process.env.MC_HOST || localhost, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
+  port: process.env.MC_PORT || 25565, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   username: BOTNAME,
   version: '1.21.4',
   auth: 'offline', // or 'mojang' for older versions

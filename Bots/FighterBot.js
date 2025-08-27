@@ -13,7 +13,7 @@ const ACK     = process.env.ACK     || getArg('--ack', '')
 
 //BOT INSTANCE
 const bot = mineflayer.createBot({
-  host: process.env.MC_HOST || localhost, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
+  host: process.env.MC_HOST || 'localhost', // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   port: process.env.MC_PORT || 25565, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   username: BOTNAME,
   version: '1.21.4',
@@ -28,7 +28,10 @@ bot.loadPlugin(armorManager)
 // Initial gearing on spawn
 bot.once('spawn', () => {
     console.log('Bot spawned and starting initial gearing.')
-    bot.whisper("ADMINBOT", ACK)
+    console.log('my ack code is: ' + ACK)
+    setTimeout(() => {
+        bot.whisper("ADMINBOT", ACK)
+    }, 1000) // Wait 1 second. fuck it whatever!
     state = "gearing"
 })
 

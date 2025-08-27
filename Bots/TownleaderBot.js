@@ -8,7 +8,7 @@ function getArg(flag, fallback = undefined) {
 const BOTNAME = process.env.BOTNAME || getArg('--name', `Townleader_${Math.floor(Math.random()*10000)}`);
 const ACK     = process.env.ACK     || getArg('--ack', '')
 const bot = mineflayer.createBot({
-  host: process.env.MC_HOST || localhost, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
+  host: process.env.MC_HOST || 'localhost', // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   port: process.env.MC_PORT || 25565, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   username: BOTNAME,
   version: '1.21.4',

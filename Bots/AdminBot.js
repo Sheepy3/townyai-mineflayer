@@ -4,7 +4,7 @@ const { spawn } = require('child_process')
 const path = require('path')
 
 const bot = mineflayer.createBot({
-  host: process.env.MC_HOST || localhost, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
+  host: process.env.MC_HOST || 'localhost', // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   port: process.env.MC_PORT || 25565, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   username: 'ADMINBOT',
   version: '1.21.4',
@@ -41,7 +41,7 @@ function launchCurrent() {
 
   if (!file) {
     console.log(`[QUEUE] Unknown botType ${current.botType}. Skipping.`);
-    return finishAndStartNext(false); // (combined advance)
+    return finishAndStartNext(false);
   }
 
   console.log(`[QUEUE] Starting ${current.botType} ${current.botName} (attempt ${current.attempts}/${MAX_RETRIES})`);
@@ -53,9 +53,8 @@ function launchCurrent() {
   });
   current.child = child;
 
-  // Capture botName locally to avoid null reference issues
   const botName = current.botName;
-  child.stdout.on('data', d => process.stdout.write(`[${botName}] ${d}`));
+  //child.stdout.on('data', d => process.stdout.write(`[${botName}] ${d}`)); THIS SPAMS THE HELL OUT OF CONSOLE
   child.stderr.on('data', d => process.stderr.write(`[${botName}] ${d}`));
 
   child.on('exit', (code, signal) => {
@@ -70,7 +69,7 @@ function launchCurrent() {
       }, RETRY_DELAY_MS);
     } else {
       console.log(`[${current.botName}] exited (code=${code}, signal=${signal ?? 'none'}). Moving on.`);
-      finishAndStartNext(false);   // (combined advance)
+      finishAndStartNext(false);  
     }
   });
 }
@@ -126,6 +125,7 @@ bot.on('whisper', (_username, message) => {
       args: ['--ack', ackCode],
       ackCode
     })
+    console.log("queued a fighterbot");
     return
   }
 })

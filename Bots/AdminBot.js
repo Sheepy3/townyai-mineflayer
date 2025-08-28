@@ -125,7 +125,7 @@ bot.on('whisper', (_username, message) => {
       args: ['--ack', ackCode],
       ackCode
     })
-    console.log("queued a fighterbot");
+    console.log("queued a fighterbot with ack code" + ackCode);
     return
   }
 })

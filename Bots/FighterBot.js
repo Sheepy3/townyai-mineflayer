@@ -30,7 +30,7 @@ bot.once('spawn', () => {
     console.log('Bot spawned and starting initial gearing.')
     console.log('my ack code is: ' + ACK)
     //setTimeout(() => {
-    bot.chat(`/minecraft:msg ADMINBOT`+ACK)
+    bot.chat(`/minecraft:msg ADMINBOT `+ACK)
         //bot.whisper("ADMINBOT", ACK)
     //}, 1000)
     state = "gearing"

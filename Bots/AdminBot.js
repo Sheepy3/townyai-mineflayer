@@ -49,7 +49,7 @@ function launchCurrent() {
   const child = spawn(process.execPath, [path.join(__dirname, file), ...current.args], {
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,
-    env: { ...process.env, BOTNAME: current.botName, MC_HOST: 'localhost', MC_PORT: '25565' }
+    env: { ...process.env, BOTNAME: current.botName, MC_HOST: process.env.MC_HOST, MC_PORT: process.env.MC_PORT }
   });
   current.child = child;
 

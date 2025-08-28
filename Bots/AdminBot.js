@@ -54,7 +54,7 @@ function launchCurrent() {
   current.child = child;
 
   const botName = current.botName;
-  //child.stdout.on('data', d => process.stdout.write(`[${botName}] ${d}`)); THIS SPAMS THE HELL OUT OF CONSOLE
+  child.stdout.on('data', d => process.stdout.write(`[${botName}] ${d}`)); //THIS SPAMS THE HELL OUT OF CONSOLE
   child.stderr.on('data', d => process.stderr.write(`[${botName}] ${d}`));
 
   child.on('exit', (code, signal) => {

@@ -473,7 +473,7 @@ async function heal() {
             }
         }
         if (!foundPotion) {
-            console.log('No healing splash potion with potionId 25 found');
+            //console.log('No healing splash potion with potionId 25 found');
             state = "IDLE";
             return;
         }
@@ -492,7 +492,7 @@ async function heal() {
                 // Start sprinting away from target
                 bot.setControlState('sprint', true)
                 bot.setControlState('forward', true)
-                console.log('Running away from target while healing')
+                //console.log('Running away from target while healing')
                 await bot.waitForTicks(ticks)
             } 
             
@@ -511,9 +511,9 @@ async function heal() {
             // Immediately resume normal state after healing and re-equip sword
             state = "IDLE"
             getStrongestSword()
-            console.log('Healing complete, resuming combat')
+            //console.log('Healing complete, resuming combat')
         } catch (error) {
-            console.log('Error during healing:', error.message)
+            //console.log('Error during healing:', error.message)
             // Stop movement on error
             bot.setControlState('sprint', false)
             bot.setControlState('forward', false)
@@ -532,12 +532,12 @@ async function eat() {
         const food = await getBestFood()
         
         if (!food) {
-            console.log('No valid food found in inventory')
+            //console.log('No valid food found in inventory')
             state = "IDLE"
             return
         }
         
-        console.log('Started eating food - will jump and face away from target')
+        //console.log('Started eating food - will jump and face away from target')
         if (target && target.position) { // Face away from target and move forward
             try {
                 await lookAwayFromTarget()
@@ -552,13 +552,13 @@ async function eat() {
         
     }
     if (bot.food > HUNGER_THRESHOLD) {
-        console.log('No longer hungry, stopping eating')
+        //console.log('No longer hungry, stopping eating')
         state = "IDLE"
         getStrongestSword()
         return
     }
     else{
-        console.log(bot.food)
+        //console.log(bot.food)
     }
     bot.activateItem()
 
@@ -570,13 +570,13 @@ function return_to_ally(){
     
     const nearestAlly = getNearestAlly()
     if (!nearestAlly) {
-        console.log("No ally found to return to")
+        //console.log("No ally found to return to")
         state = "IDLE"
         return
     }
     
     const distance = bot.entity.position.distanceTo(nearestAlly.position)
-    console.log(`Returning to ally ${nearestAlly.username} (${Math.floor(distance)} blocks away)`)
+    //console.log(`Returning to ally ${nearestAlly.username} (${Math.floor(distance)} blocks away)`)
     
     // Reset current target since we're prioritizing ally proximity
     target = null
@@ -590,7 +590,7 @@ function return_to_ally(){
 function attack_target(){
     // Check if target still exists
     if (!target || !target.position) {
-        console.log("Target lost during attack")
+        //console.log("Target lost during attack")
         bot_reset()
         return
     }
@@ -621,17 +621,17 @@ function attack_target(){
                 // Miss - swing but don't attack
                 bot.swingArm()
                 consecutiveMisses++
-                console.log(`Attack missed! (${(missRoll * 100).toFixed(1)}% roll, ${(currentMissChance * 100).toFixed(1)}% threshold) - Miss streak: ${consecutiveMisses}`)
+                //console.log(`Attack missed! (${(missRoll * 100).toFixed(1)}% roll, ${(currentMissChance * 100).toFixed(1)}% threshold) - Miss streak: ${consecutiveMisses}`)
                 
                 // Reset miss streak after 5 consecutive attempts
                 if (consecutiveMisses >= MISS_STREAK_RESET) {
-                    console.log(`Miss streak reset after ${MISS_STREAK_RESET} consecutive attempts`)
+                    //console.log(`Miss streak reset after ${MISS_STREAK_RESET} consecutive attempts`)
                     consecutiveMisses = 0
                 }
             } else {
                 // Hit - do real damage and reset miss streak
                 bot.attack(target)
-                console.log(`Attack hit! Reach: ${currentReach.toFixed(2)}, Miss chance was: ${(currentMissChance * 100).toFixed(1)}% - Miss streak reset`)
+                //console.log(`Attack hit! Reach: ${currentReach.toFixed(2)}, Miss chance was: ${(currentMissChance * 100).toFixed(1)}% - Miss streak reset`)
                 consecutiveMisses = 0 // Reset miss streak on successful hit
             }
         } /*else if (distance <= 8) {
@@ -665,7 +665,7 @@ function handleStrafing () {
     // ------- End current strafe when its hold cooldown elapses -------
     if (strafeDirection && canDoAction('strafeHold')) {
       stopAllStrafe()
-      console.log('Strafe movement ended')
+      //console.log('Strafe movement ended')
     }
   
     // new strafe decision
@@ -676,23 +676,23 @@ function handleStrafing () {
         case 'left': {
           const dur = LEFT_RIGHT_MIN_MS + Math.random() * (LEFT_RIGHT_MAX_MS - LEFT_RIGHT_MIN_MS)
           startStrafe('left', dur)
-          console.log(`Started strafing left for ${(dur / 1000).toFixed(1)}s`)
+          //console.log(`Started strafing left for ${(dur / 1000).toFixed(1)}s`)
           break
         }
         case 'right': {
           const dur = LEFT_RIGHT_MIN_MS + Math.random() * (LEFT_RIGHT_MAX_MS - LEFT_RIGHT_MIN_MS)
           startStrafe('right', dur)
-          console.log(`Started strafing right for ${(dur / 1000).toFixed(1)}s`)
+          //console.log(`Started strafing right for ${(dur / 1000).toFixed(1)}s`)
           break
         }
         case 'back': {
           startStrafe('back', BACK_MS)
-          console.log('Started backing up for 0.5s')
+          //console.log('Started backing up for 0.5s')
           break
         }
         default: {
           stopAllStrafe()
-          console.log('No strafe movement this cycle')
+          //console.log('No strafe movement this cycle')
           break
         }
       }
@@ -709,7 +709,7 @@ function handleStrafing () {
 async function move_to_target(){
     // Check if target still exists and has position
     if (!target || !target.position) {
-        console.log("Target lost during movement")
+        //console.log("Target lost during movement")
         bot_reset()
         return
     }
@@ -731,7 +731,7 @@ async function move_to_target(){
             const eyePos = target.position.offset(0, 1.62, 0);
             bot.lookAt(eyePos);
             bot.swingArm()
-            console.log("Movement swinging - target within 10 blocks")
+            //console.log("Movement swinging - target within 10 blocks")
         }
     }
 }
@@ -742,7 +742,7 @@ function idle() {
     const pitch = (Math.random() - 0.5) * 0.5 // Slight up/down look
     
     bot.look(yaw, pitch)
-    console.log("Looking around for targets...")
+    //console.log("Looking around for targets...")
 }
 
 //HELPER FUNCTIONS
@@ -766,7 +766,7 @@ function checkForClosestTarget() {
     
     if (players.length === 0){
         if (target) {
-            console.log("No enemies detected - Resetting")
+            //console.log("No enemies detected - Resetting")
             bot_reset()
         }
         return
@@ -787,7 +787,7 @@ function checkForClosestTarget() {
     // Only engage targets within range
     if (closestDistance > TARGETING_RANGE) {
         if (target) {
-            console.log(`Closest enemy ${closestEnemy.username} too far (${Math.floor(closestDistance)} blocks) - Resetting`)
+            //console.log(`Closest enemy ${closestEnemy.username} too far (${Math.floor(closestDistance)} blocks) - Resetting`)
             bot_reset()
         }
         return
@@ -797,7 +797,7 @@ function checkForClosestTarget() {
     if (!target || target.id !== closestEnemy.id) {
         const previousTarget = target ? target.username : "none"
         target = closestEnemy
-        console.log(`Target switch: ${previousTarget} → ${target.username} at ${Math.floor(closestDistance)} blocks (closest enemy)`)
+        //console.log(`Target switch: ${previousTarget} → ${target.username} at ${Math.floor(closestDistance)} blocks (closest enemy)`)
         attemptDrinkBuffPotions();
     }
 }
@@ -940,7 +940,7 @@ function bot_reset(){
     strafeDirection = null // Reset strafe state
     strafeEndTime = 0
     bot.pathfinder.setGoal(null)
-    console.log("RESETTING")
+    //console.log("RESETTING")
     state = "IDLE"
     attemptDrinkBuffPotions();
 }

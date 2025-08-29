@@ -85,6 +85,8 @@ const LASTACTION = new Map()
 const ALLY_LIST = ['ADMINBOT'] // Players the bot will not attack
 const ALLY_MAX_DISTANCE = 30 // Maximum distance from allied players
 
+
+
 // Flag queue system
 let flagQueue = [];
 
@@ -170,6 +172,13 @@ bot.on('whisper', (from, msg) => {
     // Chat command handler using AdminBot/TownleaderBot parsing style
     bot.on('chat', (username, message) => {
         if (username === bot.username) return;
+        
+        //chat command whitelist
+        if (!['ADMINBOT', 'Asdeo', 'Saier','Civwars'].some(allowedUser => 
+            allowedUser.toLowerCase() === username.toLowerCase())) {
+            return; // Silently ignore commands from non-whitelisted users
+        }
+        
         const parts = message.trim().split(/\s+/);
         const command = parts[0].toLowerCase();
         const args = parts.slice(1);

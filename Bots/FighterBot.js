@@ -13,7 +13,7 @@ const ACK     = process.env.ACK     || getArg('--ack', '')
 
 //BOT INSTANCE
 const bot = mineflayer.createBot({
-  host: process.env.MC_HOST || 'localhost', // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
+  host: process.env.MC_HOST || '100.99.80.104', // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   port: process.env.MC_PORT || 25565, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   username: BOTNAME,
   version: '1.21.4',
@@ -92,9 +92,9 @@ COOLDOWN.set('movementSwing',75) // ~13 CPS for movement swinging
 COOLDOWN.set('lookAround',2000) // 2 seconds between look around actions
 COOLDOWN.set('targetCheck',2000) // 2 seconds between target checks
 COOLDOWN.set('strafeDecision',4000) // 4 seconds between strafe decisions
-COOLDOWN.set('drink_36', 95000); // 1 min 35 sec
-COOLDOWN.set('drink_15', 95000); // 1 min 35 sec
-COOLDOWN.set('drink_12', 480000); // 8 min
+//COOLDOWN.set('drinkStrength', 95000); // 1 min 35 sec
+//COOLDOWN.set('drinkSpeed', 95000); // 1 min 35 sec
+//COOLDOWN.set('drinkFireRes', 480000); // 8 min
 
 // Ally system constants
 var ALLY_LIST = ['ADMINBOT'] // Players the bot will not attack
@@ -145,7 +145,6 @@ bot.on('chat', (username, message) => {
     }
 });
 
-    // Chat command handler using AdminBot/TownleaderBot parsing style
     bot.on('whisper', (username, message) => {
         if (username === bot.username) return;
 
@@ -282,113 +281,41 @@ bot.on('physicsTick', async () => {
             console.log("im mining now")
             return;
         }
-
-        // Flag queue movement logic [this can and should be collapsed into the base logic tree, as most of the this tree is entirely duplicated.]
-        if (flagQueue.length > 0) { 
-            const flag = flagQueue[0];
-            const distToFlag = bot.entity.position.distanceTo(flag);
-            // If within 15 blocks of flag, check for enemies
-
-            if (distToFlag <= 15) {
-                // Full combat logic near flag
-                // 1. Heal if needed
-                if (bot.health < HEALTH_THRESHOLD && canHealSelf()) {
-                    heal();
-                    return;
-                }
-                // 2. Eat if needed
-                if (bot.food <= HUNGER_THRESHOLD && canEatFood() || state == "EATING") {
-                    eat();
-                    return;
-                }
-                // 3. Gear up if needed
-                if (state === "gearing") {
-                    gear();
-                    return;
-                }
-                // 4. Buffing logic (speed, strength, fire resistance)
-                buffSelf();
-
-                // 5. Equip best sword if not equipped
-                getStrongestSword();
-
-                // 6. Return to ally if too far
-                if (isTooFarFromAlly()) {
-                    return_to_ally();
-                    return;
-                }
-
-                // 7. Check for closest enemy (not ally)
-                const enemy = Object.values(bot.entities)
-                    .filter(e => e.type === 'player' && e.username !== bot.username && !ALLY_LIST.includes(e.username))
-                    .filter(e => e.position && bot.entity.position.distanceTo(e.position) <= TARGETING_RANGE)
-                    .sort((a, b) => bot.entity.position.distanceTo(a.position) - bot.entity.position.distanceTo(b.position))[0];
-                if (enemy) {
-                    target = enemy;
-                    state = "ATTACKING TARGET";
-                    // Move towards the target using pathfinder
-                    bot.setControlState('sprint', true);
-                    bot.pathfinder.setGoal(new goals.GoalFollow(target, REACH_MIN + 0.1));
-                    // Look at target's eye position before attacking
-                    const eyePos = target.position.offset(0, 1.62, 0);
-                    bot.lookAt(eyePos);
-                    attack_target();
-                    return;
-                } else {
-                    // No enemies, continue moving to flag
-                    if (state !== "MOVING TO FLAG") moveToFlag();
-                    return;
-                }
-            } else {
-                // Greater than 8 blocks from flag: only allow eating/healing interrupts
-                if (bot.health < HEALTH_THRESHOLD && canHealSelf()) {
-                    heal();
-                    return;
-                }
-                if (bot.food <= HUNGER_THRESHOLD && canEatFood() || state == "EATING") {
-                    eat();
-                    return;
-                }
-                // Otherwise, always move to flag
-                if (state !== "MOVING TO FLAG") moveToFlag();
-                return;
-            }
-        }
-
-        // Continuous target checking every 2 seconds (except when eating or gearing)
+        
+        // 0. reevaluate target
         if (state !== "EATING" && state !== "gearing" && canDoAction("targetCheck")) {
             checkForClosestTarget()
         }
-
-        // Bot state priority: 1. gear -> 2. heal -> 3. eat -> 4. ally -> 5. attack -> 6. move -> 7. target
-
-        if (state === "COMBATBUFFS") {
-            // Only healing can interrupt COMBATBUFFS
-            if (bot.health < HEALTH_THRESHOLD && canHealSelf()) {
-                heal();
-            }
-        } else {
+        else {
+            //console.log(bot.entity.effects)
             // 1. Equip armor
             if(state === "gearing"){
                 gear()
             }
-            // 2. Heal 
+            
+            // 2. buff
+            else if ((!bot.entity.effects[4] && hasPotion(36)) || 
+                     (!bot.entity.effects[0] && hasPotion(15)) || 
+                     (!bot.entity.effects[11] && hasPotion(12))) {
+                DrinkBuffPotions();
+            }
+            // 3. Heal 
             else if(bot.health < HEALTH_THRESHOLD && canHealSelf()){
                 heal()
             }
-            // 3. Eat food 
+            // 4. Eat food 
             else if(bot.food <= HUNGER_THRESHOLD && canEatFood() || state == "EATING"){
                 eat()
             }
-            // 4. Return to ally
+            // 5. Return to ally
             else if(isTooFarFromAlly()){
                 return_to_ally()
             }
-            // 5. Attack target 
+            // 6. Attack target 
             else if(target && target.position && bot.entity.position.distanceTo(target.position) <= REACH_MAX){
                 attack_target()
             }
-            // 6. Move to target 
+            // 7. Move to target 
             else if(target && target.position){
                 move_to_target()
             }
@@ -704,36 +631,14 @@ async function move_to_target(){
     }
 }
 
-function idle() {
+/*function idle() {
     // Look in a random direction
     const yaw = Math.random() * Math.PI * 2 // Random horizontal rotation
     const pitch = (Math.random() - 0.5) * 0.5 // Slight up/down look
     
     bot.look(yaw, pitch)
     //console.log("Looking around for targets...")
-}
-
-function buffSelf() {
-    if (state === "COMBATBUFFS") return;
-    const effects = bot.entity.effects || {};
-    let buffsNeeded = [];
-    if (!effects[1]) buffsNeeded.push({name: 'potion', id: 1}); // Speed
-    if (!effects[5]) buffsNeeded.push({name: 'potion', id: 5}); // Strength
-    if (!effects[12]) buffsNeeded.push({name: 'potion', id: 12}); // Fire Resistance
-    for (const buff of buffsNeeded) {
-        const pot = bot.inventory.items().find(item => item.name === 'potion' && getPotionId(item) === buff.id);
-        if (pot) {
-            state = "COMBATBUFFS";
-            bot.equip(pot, 'hand').then(() => {
-                bot.activateItem();
-                setTimeout(() => { state = "IDLE"; getStrongestSword(); }, 2000);
-            }).catch(() => { state = "IDLE"; });
-            break;
-        }
-    }
-}
-
-
+}*/
 
 //HELPER FUNCTIONS
 async function lookAwayFromTarget(){
@@ -788,7 +693,7 @@ function checkForClosestTarget() {
         const previousTarget = target ? target.username : "none"
         target = closestEnemy
         //console.log(`Target switch: ${previousTarget} → ${target.username} at ${Math.floor(closestDistance)} blocks (closest enemy)`)
-        attemptDrinkBuffPotions();
+        //attemptDrinkBuffPotions(); MARKED FOR REMOVAL - LET STATE MACHINE HANDLE IT 
     }
 }
 
@@ -827,7 +732,8 @@ function isTooFarFromAlly() {
 }
 
 // Shared helper function for getting items in inventory
-async function GetItemInInventory(itemName) {
+
+/*async function GetItemInInventory(itemName) { UNUSED? 
     let found_item = bot.inventory.items().find(item => item.name === itemName)
     if (found_item){
         await bot.equip(found_item, 'hand')
@@ -840,20 +746,29 @@ async function GetItemInInventory(itemName) {
 // Shared helper function for checking if item exists in inventory
 function hasItemInInventory(itemName) {
     return bot.inventory.items().some(item => item.name === itemName)
-}
+}*/
 
 function getPotionId(item) { //unused
     const comp = item.components?.find(c => c.type === 'potion_contents')
     return comp?.data?.potionId
 }
 
-// Buff logic: checks for any splash instant health potion (strong or regular)
-function canHealSelf() {
+function canHealSelf() { //TO BE REPLACED BY hasPotion(ID)
     // Only return true if splash potion with potionId 25 is present
     const splashPotions = bot.inventory.items().filter(item => item.name === 'splash_potion');
     for (const item of splashPotions) {
         if (getPotionId(item) === 25) return true;
     }
+    return false;
+}
+
+function hasPotion(id) {
+    // Only return true if splash potion with potionId 25 is present
+    const potion= bot.inventory.items().filter(item => item.name === 'potion');
+    for (const item of potion) {
+        if (getPotionId(item) === id) return true;
+    }
+    
     return false;
 }
 
@@ -932,57 +847,66 @@ function bot_reset(){
     bot.pathfinder.setGoal(null)
     //console.log("RESETTING")
     state = "IDLE"
-    attemptDrinkBuffPotions();
+    //attemptDrinkBuffPotions(); MARKED FOR REMOVAL - LET STATE MACHINE HANDLE IT 
 }
 // Attempt to drink buff potions (IDs: 36, 15, 12) with cooldowns
-async function attemptDrinkBuffPotions() {
-    //const now = Date.now();
-    const potionsToDrink = [
-        { id: 36, cooldownKey: 'drink_36' },
-        { id: 15, cooldownKey: 'drink_15' },
-        { id: 12, cooldownKey: 'drink_12' }
-    ];
-    // Set state to COMBATBUFFS
-    state = "COMBATBUFFS";
-    // Stop movement while drinking potions
-    bot.setControlState('sprint', false);
-    bot.setControlState('forward', false);
-    bot.setControlState('left', false);
-    bot.setControlState('right', false);
-    bot.setControlState('back', false);
-    bot.setControlState('jump', false);
 
-    for (const { id, cooldownKey } of potionsToDrink) {
-        // Always check the latest ally list and cooldowns
-        const last = LASTACTION.get(cooldownKey) || 0;
-        const isCooldownReady = COOLDOWN.get(cooldownKey) < (Date.now() - last);
-        const isValidTarget = target && target.username && !isAlly(target.username);
-        if (isCooldownReady && isValidTarget) {
-            // Find all matching potions in inventory
-            const potions = bot.inventory.items().filter(item => item.name === 'potion' && getPotionId(item) === id);
-            for (const item of potions) {
-                // Move away from target before drinking
-                await lookAwayFromTarget();
-                bot.setControlState('sprint', true);
-                bot.setControlState('forward', true);
-                await new Promise(res => setTimeout(res, 1000));
-                bot.setControlState('sprint', false);
-                bot.setControlState('forward', false);
-                await bot.equip(item, 'hand');
-                await bot.activateItem();
-                // Wait for drinking animation to finish (2 seconds typical)
-                await new Promise(res => setTimeout(res, 2000));
-                LASTACTION.set(cooldownKey, Date.now());
-                bot.chat(`Drank potion ID ${id}`);
-                // Re-equip strongest sword after drinking
-                getStrongestSword();
+async function DrinkBuffPotions(){
+    if(state == "DRINKINGFRES"){
+        if(bot.entity.effects[11]){
+            bot.chat("drank fres")
+            state = "IDLE"
+        }
+        bot.activateItem()
+        return
+    }
+    if(state == "DRINKINGSPEED"){
+        if(bot.entity.effects[0]){
+            bot.chat("drank speed")
+            state = "IDLE"
+        }
+        bot.activateItem()
+        return
+    }
+    if(state == "DRINKINGSTRENGTH"){
+        if(bot.entity.effects[4]){
+            bot.chat("drank strength")
+            state = "IDLE"
+        }
+        bot.activateItem()
+        return
+    }    
+    const potionsToDrink = [
+        { potion_id: 36, effect_id:4},
+        { potion_id: 15, effect_id:0},
+        { potion_id: 12, effect_id:11}
+    ];
+    for (const { potion_id, effect_id } of potionsToDrink) {
+        if(!bot.entity.effects[effect_id]){
+            console.log("missing " + effect_id)
+            const potions = bot.inventory.items().filter(item => item.name === 'potion' && getPotionId(item) === potion_id);
+            if (potions.length > 0) {
+                await bot.equip(potions[0], 'hand');
+                switch (effect_id) {
+                    case 11:
+                        state = "DRINKINGFRES";
+                        break;
+                    case 0:
+                        state = "DRINKINGSPEED";
+                        break;
+                    case 4:
+                        state = "DRINKINGSTRENGTH";
+                        break;
+                }
+            }else{
+                bot.chat("no potion of id" + potion_id)
             }
+
+
         }
     }
-    // Return to previous state after buffs (if needed)
-    state = "IDLE";
 }
- 
+
 function addFlag(vec) {
     flagQueue.push(vec);
     bot.chat(`Flag added: (${vec.x}, ${vec.y}, ${vec.z})`);

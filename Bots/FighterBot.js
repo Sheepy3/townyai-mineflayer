@@ -61,34 +61,32 @@ var strafeDirection = null // Current strafe direction (null, 'left', 'right', '
 const TARGETING_RANGE = 25 // Close range targeting
 
 //HITTING CONSTANTS
-const REACH_MIN = 2.85 // Minimum attack reach
-const REACH_MAX = 3.68 // Maximum attack reach
-const MISS_CHANCE_BASE = 0.02 // 18% base miss chance
-const MISS_CHANCE_MAX_BASE = 0.12 // 20% maximum base miss chance
+var REACH_MIN                  = 2.85 // Minimum attack reach
+var REACH_MAX                  = 3.68 // Maximum attack reach
+var MISS_CHANCE_BASE           = 0.02 // 2% base miss chance
+const MISS_CHANCE_MAX          = 0.12 // 20% maximum miss chance
 const MISS_STREAK_INCREASE_MIN = 0.05 // 5% minimum increase per consecutive miss
 const MISS_STREAK_INCREASE_MAX = 0.12 // 12% maximum increase per consecutive miss
-const MISS_STREAK_RESET = 5 // Reset miss streak after 5 attempts
+const MISS_STREAK_RESET        = 5 // Reset miss streak after 5 attempts
 
 //STRAFING CONSTANTS
-const LEFT_RIGHT_MIN_MS = 1000;   // 1s
-const LEFT_RIGHT_MAX_MS = 3000;   // 3s
-const BACK_MS           = 500;    // 0.5s
-const JUMP_CHANCE       = 0.02;   // 2%
-const JUMP_HOLD_MS      = 50;     // short tap
-const CPS = 13 //sheepy cps
+var LEFT_RIGHT_MIN_MS  = 1000;   // 1s
+var LEFT_RIGHT_MAX_MS  = 3000;   // 3s
+const BACK_MS          = 500;    // 0.5s
+const JUMP_CHANCE      = 0.02;   // 2%
+const JUMP_HOLD_MS     = 50;     // short tap
+var CPS                = 13 //used to calculate attack cooldown
 const HEALTH_THRESHOLD = 10
 const HUNGER_THRESHOLD = 18
 const COOLDOWN = new Map()
 const LASTACTION = new Map()
 
 // Ally system constants
-const ALLY_LIST = ['ADMINBOT'] // Players the bot will not attack
+var ALLY_LIST = ['ADMINBOT'] // Players the bot will not attack
 const ALLY_MAX_DISTANCE = 30 // Maximum distance from allied players
 
-
-
 // Flag queue system
-let flagQueue = [];
+var flagQueue = [];
 
 // Helper to add a flag (Vec3)
 function addFlag(vec) {
@@ -165,20 +163,30 @@ bot.on('playerCollect', (collector, itemDrop) => {
     }
 });
 
-bot.on('whisper', (from, msg) => {
-    bot.chat('recieved: ' + msg)
+bot.on('chat', (from, msg) => {
+    if (username === bot.username) return;   
+
+    if (!['ADMINBOT', 'Asdeo', 'Saier','Civwars'].some(allowedUser => 
+        allowedUser.toLowerCase() === username.toLowerCase())) {
+        return; // Silently ignore commands from non-whitelisted users
+    }
+    const parts = message.trim().split(/\s+/);
+    const command = parts[0].toLowerCase();
+    const args = parts.slice(1);
+    
+    switch (command) {
+    case 'gearup':
+        state = "gearing";
+        bot.chat("Recalling gearing up state and equipping armor.");
+        gear();
+        break;
+    }
 });
 
     // Chat command handler using AdminBot/TownleaderBot parsing style
-    bot.on('chat', (username, message) => {
+    bot.on('whisper', (username, message) => {
         if (username === bot.username) return;
-        
-        //chat command whitelist
-        if (!['ADMINBOT', 'Asdeo', 'Saier','Civwars'].some(allowedUser => 
-            allowedUser.toLowerCase() === username.toLowerCase())) {
-            return; // Silently ignore commands from non-whitelisted users
-        }
-        
+
         const parts = message.trim().split(/\s+/);
         const command = parts[0].toLowerCase();
         const args = parts.slice(1);
@@ -221,11 +229,7 @@ bot.on('whisper', (from, msg) => {
                     // Usage: goto (moves to first flag in queue)
                     moveToFlag();
                     break;
-            case 'gearup':
-                state = "gearing";
-                bot.chat("Recalling gearing up state and equipping armor.");
-                gear();
-                break;
+
             case 'addally':
                 if (args.length === 1) {
                     const allyNames = args[0].split(',').map(a => a.trim()).filter(a => a.length > 0);
@@ -263,6 +267,35 @@ bot.on('whisper', (from, msg) => {
                     if (notfound.length > 0) bot.chat(`Not in ally list: ${notfound.join(', ')}`);
                 } else {
                     bot.chat('Usage: removeally <username1,username2,...>');
+                }
+                break;
+            case 'config':
+                // Usage: config <CPS> <REACH_MIN> <REACH_MAX> <LEFT_RIGHT_MIN_MS> <LEFT_RIGHT_MAX_MS> <MISS_CHANCE_BASE>
+                if (args.length === 6) {
+                    const newCPS = parseFloat(args[0]);
+                    const newReachMin = parseFloat(args[1]);
+                    const newReachMax = parseFloat(args[2]);
+                    const newLeftRightMinMs = parseFloat(args[3]);
+                    const newLeftRightMaxMs = parseFloat(args[4]);
+                    const newMissChanceBase = parseFloat(args[5]);
+                    
+                    if (!isNaN(newCPS) && !isNaN(newReachMin) && !isNaN(newReachMax) && 
+                        !isNaN(newLeftRightMinMs) && !isNaN(newLeftRightMaxMs) && !isNaN(newMissChanceBase)) {
+                        
+                        CPS = newCPS;
+                        REACH_MIN = newReachMin;
+                        REACH_MAX = newReachMax;
+                        LEFT_RIGHT_MIN_MS = newLeftRightMinMs;
+                        LEFT_RIGHT_MAX_MS = newLeftRightMaxMs;
+                        MISS_CHANCE_MAX = newMissChanceBase;
+
+                        COOLDOWN.set('attack',800/CPS)
+                        bot.chat(`Configuration updated: CPS=${CPS}, REACH_MIN=${REACH_MIN}, REACH_MAX=${REACH_MAX}, LEFT_RIGHT_MIN_MS=${LEFT_RIGHT_MIN_MS}, LEFT_RIGHT_MAX_MS=${LEFT_RIGHT_MAX_MS}, MISS_CHANCE_MAX=${MISS_CHANCE_MAX}`);
+                    } else {
+                        bot.chat('Usage: config <CPS> <REACH_MIN> <REACH_MAX> <LEFT_RIGHT_MIN_MS> <LEFT_RIGHT_MAX_MS> <MISS_CHANCE_MAX> - All values must be numbers');
+                    }
+                } else {
+                    bot.chat('Usage: config <CPS> <REACH_MIN> <REACH_MAX> <LEFT_RIGHT_MIN_MS> <LEFT_RIGHT_MAX_MS> <MISS_CHANCE_MAX>');
                 }
                 break;
             default:
@@ -615,7 +648,7 @@ function attack_target(){
     handleStrafing()
     
     // Calculate progressive miss chance based on consecutive misses
-    const baseMissChance = MISS_CHANCE_BASE + Math.random() * (MISS_CHANCE_MAX_BASE - MISS_CHANCE_BASE)
+    const baseMissChance = MISS_CHANCE_BASE + Math.random() * (MISS_CHANCE_MAX - MISS_CHANCE_BASE)
     const streakIncrease = consecutiveMisses * (MISS_STREAK_INCREASE_MIN + Math.random() * (MISS_STREAK_INCREASE_MAX - MISS_STREAK_INCREASE_MIN))
     const currentMissChance = Math.min(baseMissChance + streakIncrease, 0.85) // Cap at 85% miss chance
     

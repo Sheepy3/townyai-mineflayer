@@ -21,4 +21,22 @@ const bot = mineflayer.createBot({
 
 bot.once('spawn', () => {
   bot.chat(`/minecraft:msg ADMINBOT `+ACK)
+  //console.log(bot._client.protocol.state.handshake.login.explosion);
 })
+
+bot.on('error', err => {
+  console.error(`${bot.username} error:`, err.message);
+  
+  // Handle protocol errors gracefully
+  if (err.message.includes('PartialReadError') || err.message.includes('Read error')) {
+    console.log(`${bot.username}: Protocol read error detected, this is usually harmless`);
+    return;
+  }
+  
+  // For other errors, you might want to reconnect
+  if (err.message.includes('ECONNRESET') || err.message.includes('Connection lost')) {
+    console.log(`${bot.username}: Connection lost, could not connect.`);
+    process.exit(101);
+  //  // You could implement reconnection logic here
+  }
+});

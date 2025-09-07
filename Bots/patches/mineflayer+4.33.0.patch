@@ -1,0 +1,15 @@
+diff --git a/node_modules/mineflayer/lib/plugins/physics.js b/node_modules/mineflayer/lib/plugins/physics.js
+index 0bcf679..c1596e7 100644
+--- a/node_modules/mineflayer/lib/plugins/physics.js
++++ b/node_modules/mineflayer/lib/plugins/physics.js
+@@ -308,6 +308,10 @@ function inject (bot, { physicsEnabled, maxCatchupTicks }) {
+     // TODO: emit an explosion event with more info
+     if (bot.physicsEnabled && bot.game.gameMode !== 'creative') {
+       if (explosion.playerKnockback) { // 1.21.3+
++        const kb = explosion.playerKnockback; //packet issue patch
++        if (Math.abs(kb.y) < 1e-10) kb.y = 0; //packet issue patch
++        if (Math.abs(kb.y) > 100) kb.y = 0; //packet issue patch
++        if (kb.y === null || isNaN(kb.y)) kb.y = 0; //packet issue patch
+         // Fixes issue #3635
+         bot.entity.velocity.x += explosion.playerKnockback.x
+         bot.entity.velocity.y += explosion.playerKnockback.y

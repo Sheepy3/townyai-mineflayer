@@ -1,14 +1,10 @@
 # syntax=docker/dockerfile:1
-
 ARG NODE_VERSION=22.18.0
 FROM node:${NODE_VERSION}-alpine
 
-ENV NODE_ENV=production
-
 WORKDIR /usr/src/app
 
-# Install with dev deps so patch-package exists, apply patches, then prune dev deps away.
-# Also make 'patches/' available during install so postinstall can find them.
+# Install WITH devDeps so patch-package exists; patches/ must be present for postinstall.
 RUN --mount=type=bind,source=package.json,target=package.json \
     --mount=type=bind,source=package-lock.json,target=package-lock.json \
     --mount=type=bind,source=patches,target=patches \
@@ -16,6 +12,11 @@ RUN --mount=type=bind,source=package.json,target=package.json \
     npm ci \
  && npm prune --omit=dev
 
+# Now switch to production mode (after pruning) and copy the rest.
+ENV NODE_ENV=production
+
 USER node
 COPY . .
+
+# JSON-form CMD (handles signals properly)
 CMD ["node", "AdminBot.js"]

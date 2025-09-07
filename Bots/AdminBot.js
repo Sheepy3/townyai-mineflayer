@@ -37,7 +37,8 @@ function startNext() {
 function launchCurrent() {
   const file =
     current.botType === 'townleader' ? 'TownleaderBot.js' :
-    current.botType === 'fighter'     ? 'FighterBot.js'     : null;
+    current.botType === 'fighter'     ? 'FighterBot.js'     :
+    current.botType === 'dummy'       ? 'DummyBot.js'      : null;
 
   if (!file) {
     console.log(`[QUEUE] Unknown botType ${current.botType}. Skipping.`);
@@ -125,7 +126,18 @@ bot.on('whisper', (_username, message) => {
       args: ['--ack', ackCode],
       ackCode
     })
-    console.log("queued a fighterbot with ack code" + ackCode);
-    return
   }
+
+  // spawndummy <dummyName> <ack_code>
+  if (command === 'dummy' && parts.length === 3) {
+    const [, dummyName, ackCode] = parts
+    enqueue({
+      botName: dummyName,
+      botType: 'dummy',
+      args: ['--ack', ackCode],
+      ackCode
+    })
+  }
+
+
 })

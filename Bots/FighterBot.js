@@ -59,6 +59,7 @@ var target = null
 var consecutiveMisses = 0 // Track consecutive misses for progressive miss chance
 var strafeDirection = null // Current strafe direction (null, 'left', 'right', 'back')
 const TARGETING_RANGE = 25 // Close range targeting
+var follow_min_range
 
 //HITTING CONSTANTS
 var REACH_MIN                  = 2.85 // Minimum attack reach
@@ -312,7 +313,7 @@ bot.on('physicsTick', async () => {
                 return_to_ally()
             }
             // 6. Attack target 
-            else if(target && target.position && bot.entity.position.distanceTo(target.position) <= REACH_MAX){
+            else if(target && target.position && bot.entity.position.distanceTo(target.position) <= REACH_MAX && hasLineOfSight(target)){
                 attack_target()
             }
             // 7. Move to target 
@@ -612,11 +613,11 @@ async function move_to_target(){
     state = "MOVING TO TARGET"
     
     // Calculate the minimum attack range (just outside of REACH_MIN)
-    const minAttackRange = REACH_MIN + 0.1 // Small buffer to avoid getting inside the target
+    //const minAttackRange = REACH_MIN + 0.1 // Small buffer to avoid getting inside the target
     
     // Start moving to target, but stop at min attack range
     bot.setControlState('sprint', true)
-    bot.pathfinder.setGoal(new goals.GoalFollow(target, minAttackRange))
+    bot.pathfinder.setGoal(new goals.GoalFollow(target, follow_min_range))
     
     // Constantly swing sword if target is within 10 blocks
     if (target && target.position) {
@@ -641,6 +642,39 @@ async function move_to_target(){
 }*/
 
 //HELPER FUNCTIONS
+function hasLineOfSight(targetEntity, stepSize = 0.1) {
+    if (!targetEntity || !targetEntity.position) {
+        return false;
+    }
+    
+    const botPos = bot.entity.position;
+    const targetPos = targetEntity.position;
+    
+    // Calculate direction vector from bot to target
+    const direction = targetPos.minus(botPos);
+    const distance = direction.norm();
+    const normalizedDirection = direction.normalize();
+    
+    const startPos = botPos.offset(0, 1.6, 0); // Eye level
+    
+    const steps = Math.ceil(distance / stepSize);
+    
+    for (let i = 1; i < steps; i++) {
+        const t = (i * stepSize) / distance;
+        const currentPos = startPos.plus(normalizedDirection.scaled(i * stepSize));
+        
+        const block = bot.blockAt(currentPos);
+        
+        if (block && block.boundingBox === 'block') {
+            follow_min_range = 1 // lower follow range to get closer to the target than normal 
+            return false;
+        }
+    }
+    // No solid blocks found in the path
+    follow_min_range = REACH_MIN + 0.1
+    return true;
+}
+
 async function lookAwayFromTarget(){
     if (!target || !target.position) return;
     const awayFromTarget = bot.entity.position.minus(target.position).normalize();

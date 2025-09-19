@@ -16,7 +16,7 @@ const bot = mineflayer.createBot({
   host: process.env.MC_HOST || 'localhost', // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   port: process.env.MC_PORT || 25565, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   username: BOTNAME,
-  version: '1.21.4',
+  version: '1.21.8',
   auth: 'offline', // or 'mojang' for older versions
 });
 
@@ -316,7 +316,7 @@ bot.on('physicsTick', async () => {
                 attack_target()
             }
             // 7. Move to target 
-            else if(target && target.position){
+            /*else*/ if(target && target.position){
                 move_to_target()
             }
         }

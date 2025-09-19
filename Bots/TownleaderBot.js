@@ -11,7 +11,7 @@ const bot = mineflayer.createBot({
   host: process.env.MC_HOST || 'localhost', // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   port: process.env.MC_PORT || 25565, // DO NOT PUSH HARDCODED CHANGES TO THESE VALUES.
   username: BOTNAME,
-  version: '1.21.4',
+  version: '1.21.8',
   auth: 'offline',
 });
 
